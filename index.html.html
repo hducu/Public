@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>財務儀表板 - 轉帳功能增強版</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0d0f14; --surface:#161a24; --surface2:#1e2333; --border:#2a3045;
+  --green:#00e5a0; --red:#ff4d6d; --yellow:#f5c842; --blue:#4d9fff;
+  --text:#e8ecf5; --muted:#7a8299; --accent:#00e5a0;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;min-height:100vh;padding:20px;}
+.grid{display:grid;gap:16px;}
+.grid-2{grid-template-columns:1fr 1fr;}
+.grid-3{grid-template-columns:1fr 1fr 1fr;}
+@media(max-width:700px){.grid-2,.grid-3{grid-template-columns:1fr;}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;}
+.card-title{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;font-family:'Space Mono',monospace;}
+.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+.section-header .card-title{margin-bottom:0;}
+
+.hero{text-align:center;padding:28px 20px;background:linear-gradient(135deg,#161a24 0%,#1a2035 100%);border:1px solid var(--border);border-radius:20px;margin-bottom:16px;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;top:-60px;left:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(0,229,160,0.08) 0%,transparent 70%);pointer-events:none;}
+.hero-label{font-size:12px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:6px;}
+.hero-value{font-family:'Space Mono',monospace;font-size:40px;font-weight:700;color:var(--green);line-height:1;margin-bottom:4px;}
+.stat-row{display:flex;justify-content:space-around;margin-top:18px;padding-top:18px;border-top:1px solid var(--border);}
+.stat-item{text-align:center;}
+.stat-num{font-family:'Space Mono',monospace;font-size:17px;font-weight:700;}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:3px;}
+
+.tab-bar{display:flex;gap:4px;margin-bottom:20px;background:var(--surface2);border-radius:12px;padding:4px;}
+.tab-btn{flex:1;padding:8px 12px;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;color:var(--muted);background:none;transition:all 0.2s;}
+.tab-btn.active{background:var(--surface);color:var(--text);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,0.3);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+.edit-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;transition:all 0.2s;font-family:'Noto Sans TC',sans-serif;}
+.edit-btn:hover{border-color:var(--accent);color:var(--accent);}
+.add-btn{width:100%;padding:11px;background:rgba(0,229,160,0.08);border:1px dashed rgba(0,229,160,0.3);border-radius:12px;color:var(--green);font-size:13px;cursor:pointer;transition:all 0.2s;font-family:'Noto Sans TC',sans-serif;margin-top:12px;}
+.add-btn:hover{background:rgba(0,229,160,0.15);}
+.btn{flex:1;padding:12px;border:none;border-radius:10px;font-size:14px;font-family:'Noto Sans TC',sans-serif;cursor:pointer;transition:opacity 0.2s;}
+.btn:hover{opacity:0.85;}
+.btn-primary{background:var(--green);color:#000;font-weight:700;}
+.btn-cancel{background:var(--border);color:var(--muted);}
+.btn-danger{background:var(--red);color:#fff;font-weight:700;}
+
+.list-item{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border);}
+.list-item:last-child{border-bottom:none;}
+.item-name{font-size:14px;}
+.item-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+.item-val{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--green);}
+
+.expense-item{margin-bottom:13px;}
+.expense-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.bar-track{height:4px;background:var(--border);border-radius:4px;}
+.bar-fill{height:4px;border-radius:4px;transition:width 0.4s ease;}
+
+.invest-card{background:var(--surface2);border-radius:12px;padding:15px;margin-bottom:12px;}
+.invest-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+.invest-name{font-size:15px;font-weight:700;}
+.invest-ticker{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;}
+.invest-badge{font-size:12px;font-family:'Space Mono',monospace;padding:3px 8px;border-radius:6px;font-weight:700;}
+.badge-up{background:rgba(0,229,160,0.15);color:var(--green);}
+.badge-down{background:rgba(255,77,109,0.15);color:var(--red);}
+.invest-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.invest-stat-l{font-size:11px;color:var(--muted);}
+.invest-stat-v{font-size:13px;font-family:'Space Mono',monospace;margin-top:2px;}
+
+.journal-entry{padding:12px 0;border-bottom:1px solid var(--border);}
+.journal-entry:last-child{border-bottom:none;}
+.je-top{display:flex;justify-content:space-between;align-items:flex-start;}
+.je-left{flex:1;}
+.je-date{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;}
+.je-desc{font-size:14px;margin-top:2px;}
+.je-cat{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;margin-top:4px;font-family:'Space Mono',monospace;}
+.je-account{font-size:11px;color:var(--muted);margin-top:3px;}
+.je-amount{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;white-space:nowrap;margin-left:12px;}
+.je-actions{display:flex;gap:6px;margin-left:8px;align-items:center;}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px;width:92%;max-width:460px;max-height:88vh;overflow-y:auto;}
+.modal h2{font-size:16px;margin-bottom:18px;color:var(--accent);}
+.form-group{margin-bottom:13px;}
+.form-group label{font-size:12px;color:var(--muted);display:block;margin-bottom:5px;}
+.form-group input,.form-group select{width:100%;padding:10px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Space Mono',monospace;font-size:14px;outline:none;transition:border-color 0.2s;}
+.form-group input:focus,.form-group select:focus{border-color:var(--accent);}
+.form-group select option{background:var(--surface2);}
+.modal-btns{display:flex;gap:10px;margin-top:18px;}
+.radio-row{display:flex;gap:8px;margin-bottom:4px;}
+.radio-btn{flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all 0.2s;text-align:center;}
+.radio-btn.selected{border-color:var(--accent);color:var(--accent);background:rgba(0,229,160,0.08);}
+.radio-btn.sel-red.selected{border-color:var(--red);color:var(--red);background:rgba(255,77,109,0.08);}
+.radio-btn.sel-blue.selected{border-color:var(--blue);color:var(--blue);background:rgba(77,159,255,0.08);}
+
+.month-tag{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);padding:3px 8px;border:1px solid var(--border);border-radius:6px;}
+.green{color:var(--green);}
+.red{color:var(--red);}
+.yellow{color:var(--yellow);}
+.blue{color:var(--blue);}
+
+#toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#000;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;padding:10px 18px;border-radius:10px;box-shadow:0 4px 20px rgba(0,229,160,0.3);opacity:0;transition:opacity 0.3s;z-index:9999;pointer-events:none;}
+
+.hist-item{padding:12px 0;border-bottom:1px solid var(--border);}
+.hist-item:last-child{border-bottom:none;}
+.hist-detail{display:none;margin-top:10px;background:var(--surface2);border-radius:10px;padding:12px;}
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">編輯</h2>
+    <div id="modalFields"></div>
+    <div class="modal-btns">
+      <button class="btn btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="modalConfirmBtn" onclick="saveModal()">儲存</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<div style="max-width:960px;margin:0 auto;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:200px;">
+      <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:2px;">📊 財務儀表板</span>
+      <span class="month-tag" id="currentDate"></span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="edit-btn" onclick="importData()" style="font-size:12px;padding:6px 13px;">⬆ 匯入</button>
+      <button class="edit-btn" onclick="exportData()" style="font-size:12px;padding:6px 13px;border-color:rgba(0,229,160,0.4);color:var(--green);">⬇ 匯出</button>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-label">淨資產</div>
+    <div class="hero-value" id="heroNetworth">$0</div>
+    <div class="stat-row">
+      <div class="stat-item"><div class="stat-num green" id="heroAssets">$0</div><div class="stat-lbl">總資產</div></div>
+      <div class="stat-item"><div class="stat-num" id="heroLiabilities" style="color:var(--muted);">$0</div><div class="stat-lbl">負債</div></div>
+      <div class="stat-item"><div class="stat-num green" id="heroRealInc">$0</div><div class="stat-lbl">本月收入</div></div>
+      <div class="stat-item"><div class="stat-num red" id="heroRealExp">$0</div><div class="stat-lbl">本月支出</div></div>
+      <div class="stat-item"><div class="stat-num" id="heroFlow">$0</div><div class="stat-lbl">本月結餘</div></div>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('journal')">📒 日記帳</button>
+    <button class="tab-btn" onclick="switchTab('summary')">📊 本月摘要</button>
+    <button class="tab-btn" onclick="switchTab('assets')">🏦 資產管理</button>
+    <button class="tab-btn" onclick="switchTab('history')">📦 歷史存檔</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-journal">
+    <div class="card">
+      <div class="section-header">
+        <div class="card-title">交易紀錄</div>
+        <button class="btn btn-primary" style="flex:none;padding:7px 18px;font-size:13px;" onclick="openJournalModal()">＋ 新增交易</button>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="edit-btn" id="filter-all" onclick="setFilter('all')" style="border-color:var(--accent);color:var(--accent);">全部</button>
+        <button class="edit-btn" id="filter-expense" onclick="setFilter('expense')">支出</button>
+        <button class="edit-btn" id="filter-income" onclick="setFilter('income')">收入</button>
+        <button class="edit-btn" id="filter-transfer" onclick="setFilter('transfer')">轉帳</button>
+        <input type="month" id="filterMonth" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 10px;font-size:12px;font-family:'Space Mono',monospace;outline:none;" onchange="renderJournal()">
+      </div>
+
+      <div id="journalList"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-summary">
+    <div class="grid grid-2" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="section-header">
+          <div class="card-title">本月收入</div>
+          <div id="realIncTotal" style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--green);"></div>
+        </div>
+        <div id="realIncList"></div>
+      </div>
+      <div class="card">
+        <div class="section-header">
+          <div class="card-title">本月支出</div>
+          <div id="realExpTotal" style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--red);"></div>
+        </div>
+        <div id="realExpList"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-header">
+        <div class="card-title">月度預算對照</div>
+      </div>
+      <div id="budgetList"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-assets">
+    <div class="grid grid-2" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="section-header">
+          <div class="card-title">帳戶清單</div>
+          <button class="edit-btn" onclick="openAccountModal()">＋ 新增</button>
+        </div>
+        <div id="accountsList"></div>
+      </div>
+      <div class="card">
+        <div class="section-header">
+          <div class="card-title">投資組合</div>
+          <button class="edit-btn" onclick="addInvestItem()">＋ 新增</button>
+        </div>
+        <div id="investList"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-header">
+        <div class="card-title">月度預算設定</div>
+        <button class="edit-btn" onclick="openBudgetCatModal()">＋ 新增類別</button>
+      </div>
+      <div id="budgetSettingList"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-history">
+    <div class="card">
+      <div class="section-header">
+        <div class="card-title">歷史收支存檔</div>
+        <button class="edit-btn" onclick="archiveMonth()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);">⌛ 月底結算</button>
+      </div>
+      <div id="historyList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let state = {
+  accounts: [
+    { id:'acc1', name:'現金', sub:'TWD', value:916 },
+    { id:'acc2', name:'新光銀行', sub:'TWD', value:18893 },
+    { id:'acc3', name:'郵局', sub:'TWD', value:844 },
+    { id:'acc4', name:'不好動', sub:'TWD (口袋現金)', value:4843 },
+  ],
+  investments: [
+    { name:'富邦台50', ticker:'006208', shares:5, costPrice:172.00, currentPrice:174.45, breakeven:176.18, type:'etf' },
+    { name:'以太幣', ticker:'ETH', amount:0.0222777, costTWD:1487, currentTWD:1428, avgPrice:66745, type:'crypto' }
+  ],
+  categories: [
+    { id:'cat1', name:'飲食', color:'#ff6b6b', budget:7500, type:'expense' },
+    { id:'cat2', name:'虛擬', color:'#f5c842', budget:1000, type:'expense' },
+    { id:'cat3', name:'醫療', color:'#ff9f43', budget:1300, type:'expense' },
+    { id:'cat4', name:'定期定額', color:'#26de81', budget:2000, type:'expense' },
+    { id:'cat5', name:'機車', color:'#45aaf2', budget:2000, type:'expense' },
+    { id:'cat6', name:'日用品', color:'#fd79a8', budget:1000, type:'expense' },
+    { id:'cat7', name:'撲克麻將', color:'#a29bfe', budget:500, type:'expense' },
+    { id:'cat8', name:'交通', color:'#74b9ff', budget:600, type:'expense' },
+    { id:'cat9', name:'外送收入', color:'#00e5a0', budget:0, type:'income' },
+    { id:'cat10', name:'家裡支援', color:'#7bed9f', budget:0, type:'income' },
+    { id:'cat11', name:'其他收入', color:'#55efc4', budget:0, type:'income' },
+  ],
+  journal: [],
+  history: [],
+};
+
+const STORAGE_KEY = 'finance_dashboard_v2';
+let currentEditType = null;
+let currentEditIndex = null;
+let journalFilter = 'all';
+let _journalType = 'expense';
+
+function fmt(n){ return '$' + Math.round(Math.abs(n)).toLocaleString(); }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function saveState(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); showToast('已儲存 ✓'); }
+  catch(e){ console.warn('儲存失敗',e); }
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const s = JSON.parse(raw);
+      if(s.accounts) state.accounts = s.accounts;
+      if(s.investments) state.investments = s.investments;
+      if(s.categories) state.categories = s.categories;
+      if(s.journal) state.journal = s.journal;
+      if(s.history) state.history = s.history;
+    }
+  }catch(e){ console.warn('讀取失敗',e); }
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.opacity='1';
+  clearTimeout(t._t);
+  t._t = setTimeout(()=>{ t.style.opacity='0'; }, 2000);
+}
+
+function getCat(id){ return state.categories.find(c=>c.id===id); }
+function getAcc(id){ return state.accounts.find(a=>a.id===id); }
+
+function getCurrentMonthKey(){
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+function getMonthJournal(monthKey){
+  return state.journal.filter(j=> j.date && j.date.startsWith(monthKey));
+}
+function sumByCategory(entries, type){
+  const map = {};
+  entries.filter(e=>e.type===type).forEach(e=>{
+    map[e.categoryId] = (map[e.categoryId]||0) + e.amount;
+  });
+  return map;
+}
+
+function renderAll(){
+  renderHero();
+  renderJournal();
+  renderSummary();
+  renderAccounts();
+  renderInvestments();
+  renderBudgetSettings();
+  renderHistory();
+}
+
+function renderHero(){
+  const acctTotal = state.accounts.reduce((s,a)=>s+a.value,0);
+  const investTWD = state.investments.reduce((s,i)=>{
+    if(i.type==='etf') return s + i.shares * i.currentPrice;
+    return s + i.currentTWD;
+  },0);
+  const total = acctTotal + investTWD;
+
+  const mk = getCurrentMonthKey();
+  const entries = getMonthJournal(mk);
+  const totalInc = entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExp = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const flow = totalInc - totalExp;
+
+  document.getElementById('heroNetworth').textContent = fmt(total);
+  document.getElementById('heroAssets').textContent = fmt(total);
+  document.getElementById('heroLiabilities').textContent = '$0';
+  document.getElementById('heroRealInc').textContent = fmt(totalInc);
+  document.getElementById('heroRealExp').textContent = fmt(totalExp);
+  const fe = document.getElementById('heroFlow');
+  fe.textContent = (flow>=0?'+':'-') + fmt(flow);
+  fe.className = 'stat-num ' + (flow>=0?'green':'red');
+}
+
+function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    const tabs = ['journal','summary','assets','history'];
+    b.classList.toggle('active', tabs[i]===name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function setFilter(f){
+  journalFilter = f;
+  ['all','expense','income', 'transfer'].forEach(k=>{
+    const el = document.getElementById('filter-'+k);
+    if(el){ el.style.borderColor = k===f?'var(--accent)':''; el.style.color = k===f?'var(--accent)':''; }
+  });
+  renderJournal();
+}
+
+function renderJournal(){
+  const el = document.getElementById('journalList');
+  let entries = [...state.journal].sort((a,b)=> b.date.localeCompare(a.date));
+
+  const mf = document.getElementById('filterMonth');
+  if(mf && mf.value) entries = entries.filter(e=>e.date.startsWith(mf.value));
+  if(journalFilter !== 'all') entries = entries.filter(e=>e.type===journalFilter);
+
+  if(entries.length===0){
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;">尚無交易紀錄</div>';
+    return;
+  }
+
+  const groups = {};
+  entries.forEach(e=>{ (groups[e.date]||(groups[e.date]=[])).push(e); });
+
+  el.innerHTML = Object.keys(groups).sort((a,b)=>b.localeCompare(a)).map(date=>{
+    const dayEntries = groups[date];
+    const dayInc = dayEntries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+    const dayExp = dayEntries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+    const [y,m,d] = date.split('-');
+    const dateLabel = `${m}/${d}`;
+    return `
+      <div style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);">
+          <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);">${dateLabel}</span>
+          <span style="font-size:11px;color:var(--muted);">
+            ${dayInc>0?`<span style="color:var(--green);">+${fmt(dayInc)}</span>`:''}
+            ${dayExp>0?`<span style="color:var(--red);margin-left:6px;">-${fmt(dayExp)}</span>`:''}
+          </span>
+        </div>
+        ${dayEntries.map(e=>{
+          const cat = getCat(e.categoryId);
+          const acc = getAcc(e.accountId);
+          const targetAcc = getAcc(e.targetAccountId);
+          const isInc = e.type==='income';
+          const isTransfer = e.type==='transfer';
+          
+          let displayDesc = e.desc || cat?.name || '—';
+          if(isTransfer) displayDesc = `🔄 ${acc?.name} ➜ ${targetAcc?.name}`;
+
+          return `
+          <div class="journal-entry">
+            <div class="je-top">
+              <div class="je-left">
+                <div class="je-desc">${displayDesc}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+                  ${!isTransfer && cat?`<span class="je-cat" style="background:${cat.color}22;color:${cat.color};">${cat.name}</span>`:''}
+                  ${isTransfer? `<span class="je-cat" style="background:var(--blue)22;color:var(--blue);">轉帳</span>` : (acc?`<span style="font-size:11px;color:var(--muted);">📁 ${acc.name}</span>`:'')}
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="je-amount ${isTransfer?'blue':(isInc?'green':'red')}">${isTransfer?'⇄':(isInc?'+':'-')}${fmt(e.amount)}</span>
+                <div class="je-actions">
+                  <button class="edit-btn" onclick="editJournalEntry('${e.id}')">編輯</button>
+                  <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteJournalEntry('${e.id}')">刪除</button>
+                </div>
+              </div>
+            </div>
+            ${e.note?`<div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:4px;">📝 ${e.note}</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>`;
+  }).join('');
+}
+
+function buildJournalFields(entry){
+  const expCats = state.categories.filter(c=>c.type==='expense');
+  const incCats = state.categories.filter(c=>c.type==='income');
+  const type = entry?.type || _journalType;
+  const today = new Date().toISOString().slice(0,10);
+
+  return `
+    <div class="radio-row" id="typeRow">
+      <button class="radio-btn sel-red ${type==='expense'?'selected':''}" id="rb-expense" onclick="selectType('expense')">支出</button>
+      <button class="radio-btn ${type==='income'?'selected':''}" id="rb-income" onclick="selectType('income')">收入</button>
+      <button class="radio-btn sel-blue ${type==='transfer'?'selected':''}" id="rb-transfer" onclick="selectType('transfer')">轉帳</button>
+    </div>
+    <div class="form-group" style="margin-top:12px;">
+      <label>日期</label>
+      <input type="date" id="f_date" value="${entry?.date||today}">
+    </div>
+    <div class="form-group">
+      <label>金額 (TWD)</label>
+      <input type="number" id="f_amount" value="${entry?.amount||''}" placeholder="0" min="0" autofocus>
+    </div>
+    <div id="cat_group" class="form-group" style="${type==='transfer'?'display:none':''}">
+      <label>類別</label>
+      <select id="f_cat">
+        <optgroup label="── 支出 ──">
+          ${expCats.map(c=>`<option value="${c.id}" ${entry?.categoryId===c.id?'selected':''}>${c.name}</option>`).join('')}
+        </optgroup>
+        <optgroup label="── 收入 ──">
+          ${incCats.map(c=>`<option value="${c.id}" ${entry?.categoryId===c.id?'selected':''}>${c.name}</option>`).join('')}
+        </optgroup>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>${type==='transfer'?'來源帳戶':'帳戶'}</label>
+      <select id="f_acc">
+        ${state.accounts.map(a=>`<option value="${a.id}" ${entry?.accountId===a.id?'selected':''}>${a.name}</option>`).join('')}
+      </select>
+    </div>
+    <div id="target_acc_group" class="form-group" style="${type==='transfer'?'':'display:none'}">
+      <label>目標帳戶</label>
+      <select id="f_target_acc">
+        ${state.accounts.map(a=>`<option value="${a.id}" ${entry?.targetAccountId===a.id?'selected':''}>${a.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>備註</label>
+      <input type="text" id="f_note" value="${entry?.note||''}" placeholder="選填">
+    </div>`;
+}
+
+function selectType(t){
+  _journalType = t;
+  document.getElementById('rb-expense').classList.toggle('selected', t==='expense');
+  document.getElementById('rb-income').classList.toggle('selected', t==='income');
+  document.getElementById('rb-transfer').classList.toggle('selected', t==='transfer');
+  
+  const catGroup = document.getElementById('cat_group');
+  const targetGroup = document.getElementById('target_acc_group');
+  if(catGroup) catGroup.style.display = t==='transfer' ? 'none' : 'block';
+  if(targetGroup) targetGroup.style.display = t==='transfer' ? 'block' : 'none';
+}
+
+function openJournalModal(entry){
+  _journalType = entry?.type || 'expense';
+  currentEditType = entry ? 'journal_edit' : 'journal_new';
+  currentEditIndex = entry?.id || null;
+  openModal(entry?'編輯交易':'新增交易', buildJournalFields(entry), entry?'儲存':'新增');
+}
+
+function editJournalEntry(id){
+  const entry = state.journal.find(e=>e.id===id);
+  if(entry) openJournalModal(entry);
+}
+
+function deleteJournalEntry(id){
+  if(!confirm('確定刪除此筆交易？帳戶餘額將自動還原。')) return;
+  const entry = state.journal.find(e=>e.id===id);
+  if(entry){
+    const acc = getAcc(entry.accountId);
+    if(acc){
+      if(entry.type==='expense') acc.value += entry.amount;
+      else if(entry.type==='income') acc.value -= entry.amount;
+      else if(entry.type==='transfer'){
+        acc.value += entry.amount;
+        const tAcc = getAcc(entry.targetAccountId);
+        if(tAcc) tAcc.value -= entry.amount;
+      }
+    }
+  }
+  state.journal = state.journal.filter(e=>e.id!==id);
+  saveState(); renderAll();
+}
+
+function saveJournalEntry(){
+  const amount = parseFloat(document.getElementById('f_amount').value)||0;
+  const date = document.getElementById('f_date').value;
+  const categoryId = document.getElementById('f_cat')?.value;
+  const accountId = document.getElementById('f_acc').value;
+  const targetAccountId = document.getElementById('f_target_acc')?.value;
+  const note = document.getElementById('f_note').value;
+
+  if(!amount || !date){ alert('請填寫日期和金額'); return; }
+  if(_journalType === 'transfer' && accountId === targetAccountId){ alert('來源與目標帳戶不能相同'); return; }
+
+  // 還原舊餘額
+  if(currentEditType==='journal_edit'){
+    const old = state.journal.find(e=>e.id===currentEditIndex);
+    if(old){
+      const oldAcc = getAcc(old.accountId);
+      if(oldAcc){
+        if(old.type==='expense') oldAcc.value += old.amount;
+        else if(old.type==='income') oldAcc.value -= old.amount;
+        else if(old.type==='transfer'){
+          oldAcc.value += old.amount;
+          const oldTAcc = getAcc(old.targetAccountId);
+          if(oldTAcc) oldTAcc.value -= old.amount;
+        }
+      }
+    }
+  }
+
+  const entry = {
+    id: currentEditIndex || uid(),
+    type: _journalType,
+    date, amount, note,
+    categoryId: _journalType==='transfer'?null:categoryId,
+    accountId,
+    targetAccountId: _journalType==='transfer'?targetAccountId:null
+  };
+
+  // 套用新餘額
+  const acc = getAcc(accountId);
+  if(acc){
+    if(entry.type==='expense') acc.value -= amount;
+    else if(entry.type==='income') acc.value += amount;
+    else if(entry.type==='transfer'){
+      acc.value -= amount;
+      const tAcc = getAcc(targetAccountId);
+      if(tAcc) tAcc.value += amount;
+    }
+  }
+
+  if(currentEditType==='journal_edit'){
+    const idx = state.journal.findIndex(e=>e.id===currentEditIndex);
+    if(idx>=0) state.journal[idx] = entry;
+  } else {
+    state.journal.push(entry);
+  }
+
+  saveState(); closeModal(); renderAll();
+}
+
+function renderSummary(){
+  const mk = getCurrentMonthKey();
+  const entries = getMonthJournal(mk);
+  const incMap = sumByCategory(entries, 'income');
+  const expMap = sumByCategory(entries, 'expense');
+
+  const totalInc = Object.values(incMap).reduce((s,v)=>s+v,0);
+  const totalExp = Object.values(expMap).reduce((s,v)=>s+v,0);
+  document.getElementById('realIncTotal').textContent = fmt(totalInc);
+  document.getElementById('realExpTotal').textContent = fmt(totalExp);
+
+  const incCats = state.categories.filter(c=>c.type==='income');
+  const incEl = document.getElementById('realIncList');
+  const incRows = incCats.filter(c=>incMap[c.id]>0);
+  incEl.innerHTML = incRows.length===0 ? '<div style="color:var(--muted);font-size:12px;">無收入紀錄</div>' : incRows.map(c=>{
+    const v = incMap[c.id]||0;
+    const pct = totalInc>0?((v/totalInc)*100).toFixed(1):0;
+    return `<div class="expense-item"><div class="expense-row"><span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span><span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;"><span style="color:var(--muted);">${pct}%</span><span class="green">${fmt(v)}</span></span></div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div></div>`;
+  }).join('');
+
+  const expCats = state.categories.filter(c=>c.type==='expense');
+  const expEl = document.getElementById('realExpList');
+  const expRows = expCats.filter(c=>expMap[c.id]>0);
+  expEl.innerHTML = expRows.length===0 ? '<div style="color:var(--muted);font-size:12px;">無支出紀錄</div>' : expRows.map(c=>{
+    const v = expMap[c.id]||0;
+    const pct = totalExp>0?((v/totalExp)*100).toFixed(1):0;
+    return `<div class="expense-item"><div class="expense-row"><span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span><span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;"><span style="color:var(--muted);">${pct}%</span><span class="red">${fmt(v)}</span></span></div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div></div>`;
+  }).join('');
+
+  const budgetEl = document.getElementById('budgetList');
+  const budgetCats = expCats.filter(c=>c.budget>0);
+  budgetEl.innerHTML = budgetCats.length===0 ? '<div style="color:var(--muted);font-size:12px;">未設定預算</div>' : budgetCats.map(c=>{
+    const spent = expMap[c.id]||0;
+    const pct = Math.min((spent/c.budget)*100, 100).toFixed(0);
+    const over = spent > c.budget;
+    return `<div class="expense-item"><div class="expense-row"><span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span><span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;"><span class="${over?'red':'muted'}">${fmt(spent)}</span><span style="color:var(--muted);">/ ${fmt(c.budget)}</span></span></div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${over?'var(--red)':c.color};"></div></div></div>`;
+  }).join('');
+}
+
+function renderAccounts(){
+  const el = document.getElementById('accountsList');
+  el.innerHTML = state.accounts.map((a,i)=>`
+    <div class="list-item">
+      <div><div class="item-name">${a.name}</div><div class="item-sub">${a.sub}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="item-val">${fmt(a.value)}</div>
+        <button class="edit-btn" onclick="editAccount(${i})">編輯</button>
+      </div>
+    </div>`).join('');
+}
+
+let ethPriceTWD = null, ethLastUpdated = null;
+function renderInvestments(){
+  const el = document.getElementById('investList');
+  el.innerHTML = state.investments.map((inv,i)=>{
+    if(inv.type==='etf'){
+      const gain = inv.shares*(inv.currentPrice-inv.costPrice);
+      const up = gain>=0;
+      return `<div class="invest-card"><div class="invest-top"><div><div class="invest-name">${inv.name}</div><div class="invest-ticker">${inv.ticker}</div></div><div style="display:flex;gap:6px;align-items:center;"><button class="edit-btn" onclick="editInvestItem(${i})">編輯</button></div></div><div class="invest-grid"><div><div class="invest-stat-l">持股</div><div class="invest-stat-v">${inv.shares} 股</div></div><div><div class="invest-stat-l">現價</div><div class="invest-stat-v">${inv.currentPrice}</div></div><div><div class="invest-stat-l">預估損益</div><div class="invest-stat-v ${up?'green':'red'}">${up?'+':''}${fmt(gain)}</div></div><div><div class="invest-stat-l">市值</div><div class="invest-stat-v green">${fmt(inv.shares*inv.currentPrice)}</div></div></div></div>`;
+    } else {
+      const gain = inv.currentTWD - inv.costTWD;
+      const up = gain>=0;
+      return `<div class="invest-card"><div class="invest-top"><div><div class="invest-name">${inv.name}</div><div class="invest-ticker">${inv.ticker}</div></div><div style="display:flex;gap:6px;align-items:center;"><button class="edit-btn" onclick="fetchETHPrice()" style="color:var(--green);">↻</button><button class="edit-btn" onclick="editInvestItem(${i})">編輯</button></div></div><div class="invest-grid"><div><div class="invest-stat-l">持倉</div><div class="invest-stat-v">${inv.amount} ETH</div></div><div><div class="invest-stat-l">現值</div><div class="invest-stat-v green">${fmt(inv.currentTWD)}</div></div><div><div class="invest-stat-l">預估損益</div><div class="invest-stat-v ${up?'green':'red'}">${up?'+':''}${fmt(gain)}</div></div></div></div>`;
+    }
+  }).join('') + `<button class="add-btn" onclick="addInvestItem()">＋ 新增投資項目</button>`;
+}
+
+function renderBudgetSettings(){
+  const el = document.getElementById('budgetSettingList');
+  el.innerHTML = state.categories.map((c,i)=>`
+    <div class="list-item">
+      <div style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:50%;background:${c.color};display:inline-block;"></span><div><div class="item-name">${c.name}</div><div class="item-sub">${c.type==='expense'?'支出':'收入'}${c.budget>0?' · 預算 '+fmt(c.budget):''}</div></div></div>
+      <div style="display:flex;gap:6px;"><button class="edit-btn" onclick="editCategory(${i})">編輯</button></div>
+    </div>`).join('');
+}
+
+function renderHistory(){
+  const el = document.getElementById('historyList');
+  if(!state.history||state.history.length===0){
+    el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:10px;">無存檔紀錄</div>';
+    return;
+  }
+  el.innerHTML = state.history.map((h,idx)=>{
+    return `<div class="hist-item"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div class="item-name">${h.month}</div><div class="item-sub">收 ${fmt(h.income)} / 支 ${fmt(h.expense)}</div></div><div style="display:flex;align-items:center;gap:8px;"><div class="item-val ${h.net>=0?'green':'red'}">${h.net>=0?'+':''}${fmt(h.net)}</div><button class="edit-btn" style="color:var(--red);" onclick="deleteHistory(${idx})">刪除</button></div></div></div>`;
+  }).join('');
+}
+
+function archiveMonth(){
+  const mk = getCurrentMonthKey();
+  const entries = getMonthJournal(mk);
+  const totalInc = entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExp = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const net = totalInc - totalExp;
+  const now = new Date();
+  const fields = `<div class="form-group"><label>結算月份</label><input type="text" id="f_archiveMonth" value="${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}"></div>`;
+  currentEditType = 'archive';
+  openModal('📦 月底結算', fields, '確認結算');
+}
+
+function confirmArchive(){
+  const rawMonth = document.getElementById('f_archiveMonth').value;
+  const mk = rawMonth.replace('/','-');
+  const entries = getMonthJournal(mk);
+  const totalInc = entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExp = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  state.history.unshift({ month: rawMonth, income: totalInc, expense: totalExp, net: totalInc-totalExp });
+  saveState(); closeModal(); renderAll();
+}
+
+function deleteHistory(idx){ if(confirm('刪除？')){ state.history.splice(idx,1); saveState(); renderHistory(); } }
+
+function openModal(title, fields, confirmLabel){
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalFields').innerHTML = fields;
+  document.getElementById('modalConfirmBtn').textContent = confirmLabel||'儲存';
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); currentEditType = null; }
+function val(id){ return document.getElementById(id)?.value||''; }
+function numval(id){ return parseFloat(val(id))||0; }
+function field(label,id,value,type='text'){ return `<div class="form-group"><label>${label}</label><input type="${type}" id="${id}" value="${value}"></div>`; }
+
+function saveModal(){
+  if(currentEditType==='archive'){ confirmArchive(); return; }
+  if(currentEditType==='journal_new'||currentEditType==='journal_edit'){ saveJournalEntry(); return; }
+  if(currentEditType==='account_edit'){
+    const a = state.accounts[currentEditIndex];
+    a.name=val('f_name'); a.sub=val('f_sub'); a.value=numval('f_value');
+    saveState(); closeModal(); renderAll(); return;
+  }
+  if(currentEditType==='account_new'){
+    state.accounts.push({id:uid(),name:val('f_name'),sub:val('f_sub'),value:numval('f_value')});
+    saveState(); closeModal(); renderAll(); return;
+  }
+  if(currentEditType==='cat_edit'){
+    const c = state.categories[currentEditIndex];
+    c.name=val('f_name'); c.budget=numval('f_budget');
+    saveState(); closeModal(); renderAll(); return;
+  }
+  if(currentEditType==='cat_new'){
+    state.categories.push({id:uid(),name:val('f_name'),color:randomColor(),budget:numval('f_budget'),type:val('f_cattype')||'expense'});
+    saveState(); closeModal(); renderAll(); return;
+  }
+  if(currentEditType.startsWith('invest')){
+    // 這裡簡化處理投資儲存
+    renderAll(); closeModal(); return;
+  }
+}
+
+function openAccountModal(){
+  currentEditType='account_new';
+  openModal('新增帳戶', field('名稱','f_name','')+field('說明','f_sub','TWD')+field('金額','f_value',0,'number'));
+}
+function editAccount(i){
+  currentEditType='account_edit'; currentEditIndex=i;
+  const a=state.accounts[i];
+  openModal('編輯帳戶', field('名稱','f_name',a.name)+field('說明','f_sub',a.sub)+field('金額','f_value',a.value,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="state.accounts.splice(${i},1);saveState();closeModal();renderAll();">刪除帳戶</button>`);
+}
+function openBudgetCatModal(){
+  currentEditType='cat_new';
+  openModal('新增類別', field('名稱','f_name','')+`<div class="form-group"><label>類型</label><select id="f_cattype"><option value="expense">支出</option><option value="income">收入</option></select></div>`+field('預算','f_budget',0,'number'));
+}
+function editCategory(i){
+  currentEditType='cat_edit'; currentEditIndex=i;
+  const c=state.categories[i];
+  openModal('編輯類別', field('名稱','f_name',c.name)+field('預算','f_budget',c.budget,'number'));
+}
+
+async function fetchETHPrice(){
+  try{
+    const res = await fetch('https://api.bitopro.com/v3/tickers/eth_twd');
+    const data = await res.json();
+    ethPriceTWD = Math.round(parseFloat(data.data.lastPrice));
+    state.investments.forEach(inv=>{ if(inv.type==='crypto'&&inv.ticker==='ETH'){ inv.currentTWD = Math.round(inv.amount * ethPriceTWD); } });
+    renderAll(); showToast(`ETH ${ethPriceTWD.toLocaleString()} TWD`);
+  }catch(e){}
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `finance_backup.json`;
+  a.click();
+}
+function importData(){
+  const input = document.createElement('input');
+  input.type='file'; input.accept='.json';
+  input.onchange = e=>{
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = ev=>{ try{ state = JSON.parse(ev.target.result); saveState(); renderAll(); }catch(e){}};
+    reader.readAsText(file);
+  };
+  input.click();
+}
+function randomColor(){ return ['#ff6b6b','#f5c842','#26de81','#45aaf2','#fd79a8','#a29bfe','#74b9ff'][Math.floor(Math.random()*7)]; }
+
+const _now = new Date();
+document.getElementById('currentDate').textContent = `${_now.getFullYear()} 年 ${_now.getMonth()+1} 月 ${_now.getDate()} 日`;
+document.getElementById('filterMonth').value = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
+
+loadState();
+renderAll();
+fetchETHPrice();
+</script>
+</body>
+</html>
