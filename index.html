@@ -5,6 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>財務儀表板</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc }
+  from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDWr4lUqAsU_Fij-hnjEHryC3bsf2rMk2I",
+  authDomain: "money-873d5.firebaseapp.com",
+  projectId: "money-873d5",
+  storageBucket: "money-873d5.firebasestorage.app",
+  messagingSenderId: "376312716194",
+  appId: "1:376312716194:web:3e1c0dd674a8be2abfb0fb"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+let currentUser = null;
+
+window._fbSave = async function(stateObj) {
+  if(!currentUser) return;
+  try { await setDoc(doc(db, 'users', currentUser.uid), JSON.parse(JSON.stringify(stateObj))); }
+  catch(e) { console.warn('雲端儲存失敗', e); }
+};
+
+window._fbLoad = async function() {
+  if(!currentUser) return null;
+  try {
+    const snap = await getDoc(doc(db, 'users', currentUser.uid));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) { console.warn('雲端讀取失敗', e); return null; }
+};
+
+window._fbSignIn = async function() {
+  try { await signInWithPopup(auth, provider); }
+  catch(e) { alert('登入失敗：' + e.message); }
+};
+
+window._fbSignOut = async function() {
+  if(!confirm('確定登出？')) return;
+  await signOut(auth);
+};
+
+onAuthStateChanged(auth, async (user) => {
+  currentUser = user;
+  if(user) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appContent').style.display = 'block';
+    document.getElementById('userAvatar').src = user.photoURL || '';
+    document.getElementById('userName').textContent = user.displayName || user.email;
+
+    const cloud = await window._fbLoad();
+    if(cloud) {
+      if(cloud.accounts) state.accounts = cloud.accounts;
+      if(cloud.investments) state.investments = cloud.investments;
+      if(cloud.categories) state.categories = cloud.categories;
+      if(cloud.journal) state.journal = cloud.journal;
+      if(cloud.history) state.history = cloud.history;
+    } else {
+      window._fbSave(state);
+    }
+    renderAll();
+    fetchETHPrice();
+  } else {
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('appContent').style.display = 'none';
+  }
+});
+</script>
+
 <style>
 :root {
   --bg:#0d0f14; --surface:#161a24; --surface2:#1e2333; --border:#2a3045;
@@ -135,6 +209,20 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 </div>
 <div id="toast"></div>
 
+<!-- Login Screen -->
+<div id="loginScreen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:20px;">
+  <div style="text-align:center;">
+    <div style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:3px;margin-bottom:8px;">📊 財務儀表板</div>
+    <div style="font-size:28px;font-weight:700;color:var(--green);margin-bottom:6px;">歡迎回來</div>
+    <div style="font-size:13px;color:var(--muted);">登入以同步你的財務資料</div>
+  </div>
+  <button onclick="window._fbSignIn()" style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:white;border:none;border-radius:12px;font-size:15px;font-family:'Noto Sans TC',sans-serif;font-weight:700;color:#333;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+    <img src="https://www.google.com/favicon.ico" width="20" height="20"> 使用 Google 帳號登入
+  </button>
+</div>
+
+<!-- App Content -->
+<div id="appContent" style="display:none;">
 <div style="max-width:960px;margin:0 auto;">
 
   <!-- Header -->
@@ -143,9 +231,14 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:2px;">📊 財務儀表板</span>
       <span class="month-tag" id="currentDate"></span>
     </div>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;align-items:center;">
       <button class="edit-btn" onclick="importData()" style="font-size:12px;padding:6px 13px;">⬆ 匯入</button>
       <button class="edit-btn" onclick="exportData()" style="font-size:12px;padding:6px 13px;border-color:rgba(0,229,160,0.4);color:var(--green);">⬇ 匯出</button>
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">
+        <img id="userAvatar" src="" width="22" height="22" style="border-radius:50%;object-fit:cover;">
+        <span id="userName" style="font-size:12px;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <button onclick="window._fbSignOut()" style="background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;padding:0;font-family:'Noto Sans TC',sans-serif;">登出</button>
+      </div>
     </div>
   </div>
 
@@ -311,8 +404,10 @@ function fmt(n){ return '$' + Math.round(Math.abs(n)).toLocaleString(); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
 function saveState(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); showToast('已儲存 ✓'); }
-  catch(e){ console.warn('儲存失敗',e); }
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch(e){ console.warn('localStorage 儲存失敗',e); }
+  if(window._fbSave) window._fbSave(state).then(()=>showToast('已儲存 ✓')).catch(()=>showToast('已儲存（本機）✓'));
+  else showToast('已儲存 ✓');
 }
 function loadState(){
   try{
@@ -1257,9 +1352,10 @@ document.getElementById('currentDate').textContent =
 document.getElementById('filterMonth').value =
   `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
 
-loadState();
-renderAll();
-fetchETHPrice();
+// 初始化：Firebase onAuthStateChanged 會負責載入資料並 renderAll
+// 若尚未登入，loginScreen 會顯示
+loadState(); // 先從 localStorage 載入預設值
 </script>
+</div>
 </body>
 </html>
