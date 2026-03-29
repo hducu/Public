@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -5,6 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>財務儀表板</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- ================================================================
+     FIREBASE
+================================================================ -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
@@ -23,29 +28,27 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db   = getFirestore(app);
 const provider = new GoogleAuthProvider();
-
 let currentUser = null;
 
-// ── 防抖：1.5 秒內只送一次雲端儲存 ──
+// 防抖 1.5s
 let _fbSaveTimer = null;
 window._fbSave = function(stateObj) {
   if(!currentUser) return;
   clearTimeout(_fbSaveTimer);
   _fbSaveTimer = setTimeout(async () => {
-    try {
-      await setDoc(doc(db, 'users', currentUser.uid), JSON.parse(JSON.stringify(stateObj)));
-    } catch(e) { console.warn('雲端儲存失敗', e); }
+    try { await setDoc(doc(db,'users',currentUser.uid), JSON.parse(JSON.stringify(stateObj))); }
+    catch(e) { console.warn('雲端儲存失敗',e); }
   }, 1500);
 };
 
 window._fbLoad = async function() {
   if(!currentUser) return null;
   try {
-    const snap = await getDoc(doc(db, 'users', currentUser.uid));
+    const snap = await getDoc(doc(db,'users',currentUser.uid));
     return snap.exists() ? snap.data() : null;
-  } catch(e) { console.warn('雲端讀取失敗', e); return null; }
+  } catch(e) { console.warn('雲端讀取失敗',e); return null; }
 };
 
 window._fbSignIn = async function() {
@@ -60,16 +63,12 @@ window._fbSignOut = async function() {
 
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
-  // 隱藏 loading
   document.getElementById('loadingScreen').style.display = 'none';
-
   if(user) {
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('appContent').style.display = 'block';
-    document.getElementById('userAvatar').src = user.photoURL || '';
-    document.getElementById('userName').textContent = user.displayName || user.email;
-
-    // 優先用雲端資料，fallback 到 localStorage
+    document.getElementById('loginScreen').style.display  = 'none';
+    document.getElementById('appContent').style.display   = 'block';
+    document.getElementById('userAvatar').src             = user.photoURL || '';
+    document.getElementById('userName').textContent       = user.displayName || user.email;
     const cloud = await window._fbLoad();
     if(cloud) {
       if(cloud.accounts)    state.accounts    = cloud.accounts;
@@ -77,10 +76,8 @@ onAuthStateChanged(auth, async (user) => {
       if(cloud.categories)  state.categories  = cloud.categories;
       if(cloud.journal)     state.journal     = cloud.journal;
       if(cloud.history)     state.history     = cloud.history;
-      // 同步到 localStorage
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
     } else {
-      // 雲端無資料，把 localStorage 的資料推上去
       window._fbSave(state);
     }
     renderAll();
@@ -88,7 +85,7 @@ onAuthStateChanged(auth, async (user) => {
     setInterval(fetchETHPrice, 60000);
   } else {
     document.getElementById('loginScreen').style.display = 'flex';
-    document.getElementById('appContent').style.display = 'none';
+    document.getElementById('appContent').style.display  = 'none';
   }
 });
 </script>
@@ -103,25 +100,30 @@ onAuthStateChanged(auth, async (user) => {
 body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;min-height:100vh;padding:20px;}
 .grid{display:grid;gap:16px;}
 .grid-2{grid-template-columns:1fr 1fr;}
-.grid-3{grid-template-columns:1fr 1fr 1fr;}
-@media(max-width:700px){.grid-2,.grid-3{grid-template-columns:1fr;}}
+@media(max-width:700px){.grid-2{grid-template-columns:1fr;}}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;}
 .card-title{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;font-family:'Space Mono',monospace;}
 .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
 .section-header .card-title{margin-bottom:0;}
+
+/* Hero */
 .hero{text-align:center;padding:28px 20px;background:linear-gradient(135deg,#161a24 0%,#1a2035 100%);border:1px solid var(--border);border-radius:20px;margin-bottom:16px;position:relative;overflow:hidden;}
 .hero::before{content:'';position:absolute;top:-60px;left:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(0,229,160,0.08) 0%,transparent 70%);pointer-events:none;}
 .hero-label{font-size:12px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:6px;}
 .hero-value{font-family:'Space Mono',monospace;font-size:40px;font-weight:700;color:var(--green);line-height:1;margin-bottom:4px;}
-.stat-row{display:flex;justify-content:space-around;margin-top:18px;padding-top:18px;border-top:1px solid var(--border);}
+.stat-row{display:flex;justify-content:space-around;margin-top:18px;padding-top:18px;border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;}
 .stat-item{text-align:center;}
 .stat-num{font-family:'Space Mono',monospace;font-size:17px;font-weight:700;}
 .stat-lbl{font-size:11px;color:var(--muted);margin-top:3px;}
+
+/* Tabs */
 .tab-bar{display:flex;gap:4px;margin-bottom:20px;background:var(--surface2);border-radius:12px;padding:4px;}
-.tab-btn{flex:1;padding:8px 12px;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;color:var(--muted);background:none;transition:all 0.2s;}
+.tab-btn{flex:1;padding:8px 6px;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;color:var(--muted);background:none;transition:all 0.2s;}
 .tab-btn.active{background:var(--surface);color:var(--text);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,0.3);}
 .tab-panel{display:none;}
 .tab-panel.active{display:block;}
+
+/* Buttons */
 .edit-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;transition:all 0.2s;font-family:'Noto Sans TC',sans-serif;}
 .edit-btn:hover{border-color:var(--accent);color:var(--accent);}
 .add-btn{width:100%;padding:11px;background:rgba(0,229,160,0.08);border:1px dashed rgba(0,229,160,0.3);border-radius:12px;color:var(--green);font-size:13px;cursor:pointer;transition:all 0.2s;font-family:'Noto Sans TC',sans-serif;margin-top:12px;}
@@ -131,15 +133,21 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .btn-primary{background:var(--green);color:#000;font-weight:700;}
 .btn-cancel{background:var(--border);color:var(--muted);}
 .btn-danger{background:var(--red);color:#fff;font-weight:700;}
+
+/* List */
 .list-item{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border);}
 .list-item:last-child{border-bottom:none;}
 .item-name{font-size:14px;}
 .item-sub{font-size:11px;color:var(--muted);margin-top:2px;}
 .item-val{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--green);}
+
+/* Bar */
 .expense-item{margin-bottom:13px;}
 .expense-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
 .bar-track{height:4px;background:var(--border);border-radius:4px;}
 .bar-fill{height:4px;border-radius:4px;transition:width 0.4s ease;}
+
+/* Investment */
 .invest-card{background:var(--surface2);border-radius:12px;padding:15px;margin-bottom:12px;}
 .invest-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
 .invest-name{font-size:15px;font-weight:700;}
@@ -150,6 +158,8 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .invest-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .invest-stat-l{font-size:11px;color:var(--muted);}
 .invest-stat-v{font-size:13px;font-family:'Space Mono',monospace;margin-top:2px;}
+
+/* Journal */
 .journal-entry{padding:12px 0;border-bottom:1px solid var(--border);}
 .journal-entry:last-child{border-bottom:none;}
 .je-top{display:flex;justify-content:space-between;align-items:flex-start;}
@@ -157,6 +167,8 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .je-cat{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;margin-top:4px;font-family:'Space Mono',monospace;}
 .je-amount{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;white-space:nowrap;margin-left:12px;}
 .je-actions{display:flex;gap:6px;margin-left:8px;align-items:center;}
+
+/* Modal */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px;width:92%;max-width:460px;max-height:88vh;overflow-y:auto;}
@@ -171,24 +183,55 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .radio-btn{flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all 0.2s;text-align:center;}
 .radio-btn.selected{border-color:var(--accent);color:var(--accent);background:rgba(0,229,160,0.08);}
 .radio-btn.sel-red.selected{border-color:var(--red);color:var(--red);background:rgba(255,77,109,0.08);}
+
+/* Month tag */
 .month-tag{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);padding:3px 8px;border:1px solid var(--border);border-radius:6px;}
+
+/* Colors */
 .green{color:var(--green);}
 .red{color:var(--red);}
 .yellow{color:var(--yellow);}
+
+/* Toast */
 #toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#000;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;padding:10px 18px;border-radius:10px;box-shadow:0 4px 20px rgba(0,229,160,0.3);opacity:0;transition:opacity 0.3s;z-index:9999;pointer-events:none;}
+
+/* History */
 .hist-item{padding:12px 0;border-bottom:1px solid var(--border);}
 .hist-item:last-child{border-bottom:none;}
 .hist-detail{display:none;margin-top:10px;background:var(--surface2);border-radius:10px;padding:12px;}
 
-/* Loading & Login screens */
+/* Loading & Login */
 #loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
 .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 #loginScreen{display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+
+/* AI Card */
+.ai-result{margin-top:15px;padding-top:15px;border-top:1px dashed rgba(77,159,255,0.3);font-size:13px;line-height:1.9;color:#d1d1d1;}
+.ai-result strong{color:var(--blue);font-size:14px;}
 </style>
 </head>
 <body>
 
+<!-- Loading -->
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:2px;">載入中...</div>
+</div>
+
+<!-- Login -->
+<div id="loginScreen">
+  <div style="text-align:center;">
+    <div style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:3px;margin-bottom:8px;">📊 財務儀表板</div>
+    <div style="font-size:28px;font-weight:700;color:var(--green);margin-bottom:6px;">歡迎回來</div>
+    <div style="font-size:13px;color:var(--muted);">登入以同步你的財務資料</div>
+  </div>
+  <button onclick="window._fbSignIn()" style="display:flex;align-items:center;gap:10px;padding:14px 28px;background:white;border:none;border-radius:12px;font-size:15px;font-family:'Noto Sans TC',sans-serif;font-weight:700;color:#333;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+    <img src="https://www.google.com/favicon.ico" width="20" height="20"> 使用 Google 帳號登入
+  </button>
+</div>
+
+<!-- Modal -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <h2 id="modalTitle">編輯</h2>
@@ -201,41 +244,28 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 </div>
 <div id="toast"></div>
 
-<div id="loadingScreen">
-  <div class="spinner"></div>
-  <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:2px;">載入中...</div>
-</div>
-
-<div id="loginScreen">
-  <div style="text-align:center;">
-    <div style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:3px;margin-bottom:8px;">📊 財務儀表板</div>
-    <div style="font-size:28px;font-weight:700;color:var(--green);margin-bottom:6px;">歡迎回來</div>
-    <div style="font-size:13px;color:var(--muted);">登入以同步你的財務資料</div>
-  </div>
-  <button onclick="window._fbSignIn()" style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:white;border:none;border-radius:12px;font-size:15px;font-family:'Noto Sans TC',sans-serif;font-weight:700;color:#333;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-    <img src="https://www.google.com/favicon.ico" width="20" height="20"> 使用 Google 帳號登入
-  </button>
-</div>
-
+<!-- App -->
 <div id="appContent" style="display:none;">
 <div style="max-width:960px;margin:0 auto;">
 
+  <!-- Header -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
     <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:200px;">
       <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:2px;">📊 財務儀表板</span>
       <span class="month-tag" id="currentDate"></span>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <button class="edit-btn" onclick="importData()" style="font-size:12px;padding:6px 13px;">⬆ 匯入</button>
       <button class="edit-btn" onclick="exportData()" style="font-size:12px;padding:6px 13px;border-color:rgba(0,229,160,0.4);color:var(--green);">⬇ 匯出</button>
       <div style="display:flex;align-items:center;gap:8px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">
         <img id="userAvatar" src="" width="22" height="22" style="border-radius:50%;object-fit:cover;">
-        <span id="userName" style="font-size:12px;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <span id="userName" style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
         <button onclick="window._fbSignOut()" style="background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;padding:0;font-family:'Noto Sans TC',sans-serif;">登出</button>
       </div>
     </div>
   </div>
 
+  <!-- Hero -->
   <div class="hero">
     <div class="hero-label">淨資產</div>
     <div class="hero-value" id="heroNetworth">$0</div>
@@ -248,16 +278,21 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     </div>
   </div>
 
-  <div class="card" id="aiCard" style="border-color: var(--blue); background: rgba(77, 159, 255, 0.05); margin-bottom: 20px;">
-    <div class="section-header" style="margin-bottom: 0;">
-      <div class="card-title" style="color: var(--blue); display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 16px;">🤖</span> 虛擬資產與財務 AI 診斷
+  <!-- AI 診斷 -->
+  <div class="card" style="border-color:var(--blue);background:rgba(77,159,255,0.05);margin-bottom:20px;">
+    <div class="section-header" style="margin-bottom:0;">
+      <div class="card-title" style="color:var(--blue);display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">🤖</span> 虛擬資產與財務 AI 診斷
       </div>
-      <button class="btn" style="background: rgba(77,159,255,0.15); color: var(--blue); border: 1px solid var(--blue); padding: 7px 18px; font-size: 13px;" onclick="window.runAIAnalysis()" id="aiStartBtn">開始分析</button>
+      <button class="btn" id="aiStartBtn" onclick="runAIAnalysis()"
+        style="flex:none;background:rgba(77,159,255,0.15);color:var(--blue);border:1px solid var(--blue);padding:7px 18px;font-size:13px;">
+        開始分析
+      </button>
     </div>
-    <div id="aiResponseArea" style="display:none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed rgba(77,159,255,0.3); font-size: 13px; line-height: 1.8; color: #d1d1d1;"></div>
+    <div id="aiResponseArea" class="ai-result" style="display:none;"></div>
   </div>
 
+  <!-- Tabs -->
   <div class="tab-bar">
     <button class="tab-btn active" onclick="switchTab('journal')">📒 日記帳</button>
     <button class="tab-btn" onclick="switchTab('summary')">📊 本月摘要</button>
@@ -265,6 +300,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     <button class="tab-btn" onclick="switchTab('history')">📦 歷史存檔</button>
   </div>
 
+  <!-- 日記帳 -->
   <div class="tab-panel active" id="tab-journal">
     <div class="card">
       <div class="section-header">
@@ -275,16 +311,19 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-        <button class="edit-btn" id="filter-all" onclick="setFilter('all')" style="border-color:var(--accent);color:var(--accent);">全部</button>
-        <button class="edit-btn" id="filter-expense" onclick="setFilter('expense')">支出</button>
-        <button class="edit-btn" id="filter-income" onclick="setFilter('income')">收入</button>
+        <button class="edit-btn" id="filter-all"      onclick="setFilter('all')"      style="border-color:var(--accent);color:var(--accent);">全部</button>
+        <button class="edit-btn" id="filter-expense"  onclick="setFilter('expense')">支出</button>
+        <button class="edit-btn" id="filter-income"   onclick="setFilter('income')">收入</button>
         <button class="edit-btn" id="filter-transfer" onclick="setFilter('transfer')">轉帳</button>
-        <input type="month" id="filterMonth" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 10px;font-size:12px;font-family:'Space Mono',monospace;outline:none;" onchange="renderJournal()">
+        <input type="month" id="filterMonth"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 10px;font-size:12px;font-family:'Space Mono',monospace;outline:none;"
+          onchange="renderJournal()">
       </div>
       <div id="journalList"></div>
     </div>
   </div>
 
+  <!-- 本月摘要 -->
   <div class="tab-panel" id="tab-summary">
     <div class="grid grid-2" style="margin-bottom:16px;">
       <div class="card">
@@ -308,6 +347,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     </div>
   </div>
 
+  <!-- 資產管理 -->
   <div class="tab-panel" id="tab-assets">
     <div class="grid grid-2" style="margin-bottom:16px;">
       <div class="card">
@@ -321,7 +361,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
         <div class="section-header">
           <div class="card-title">投資組合</div>
           <div style="display:flex;gap:6px;align-items:center;">
-            <button class="edit-btn" id="ethRefreshBtn" onclick="fetchETHPrice()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);">↻ ETH</button>
+            <button class="edit-btn" id="ethRefreshBtn" onclick="fetchETHPrice()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);" title="更新 ETH 即時價格">↻ ETH</button>
             <button class="edit-btn" onclick="addInvestItem()">＋ 新增</button>
           </div>
         </div>
@@ -337,6 +377,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     </div>
   </div>
 
+  <!-- 歷史存檔 -->
   <div class="tab-panel" id="tab-history">
     <div class="card">
       <div class="section-header">
@@ -348,7 +389,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
   </div>
 
 </div>
-</div>
+</div><!-- /appContent -->
 
 <script>
 // ================================================================
@@ -356,281 +397,236 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 // ================================================================
 let state = {
   accounts: [
-    { id:'acc1', name:'現金', sub:'TWD', value:916 },
-    { id:'acc2', name:'新光銀行', sub:'TWD', value:18893 },
-    { id:'acc3', name:'郵局', sub:'TWD', value:844 },
-    { id:'acc4', name:'不好動', sub:'TWD (口袋現金)', value:4843 },
+    { id:'acc1', name:'現金',   sub:'TWD',             value:916   },
+    { id:'acc2', name:'新光銀行', sub:'TWD',            value:18893 },
+    { id:'acc3', name:'郵局',   sub:'TWD',             value:844   },
+    { id:'acc4', name:'不好動', sub:'TWD (口袋現金)',   value:4843  },
   ],
   investments: [
     { name:'富邦台50', ticker:'006208', shares:5, costPrice:172.00, currentPrice:174.45, breakeven:176.18, type:'etf' },
-    { name:'以太幣', ticker:'ETH', amount:0.0222777, costTWD:1487, currentTWD:1428, avgPrice:66745, type:'crypto' }
+    { name:'以太幣',   ticker:'ETH',    amount:0.0222777, costTWD:1487, currentTWD:1428, avgPrice:66745,   type:'crypto' }
   ],
   categories: [
-    { id:'cat1', name:'飲食', color:'#ff6b6b', budget:7500, type:'expense' },
-    { id:'cat2', name:'虛擬', color:'#f5c842', budget:1000, type:'expense' },
-    { id:'cat3', name:'醫療', color:'#ff9f43', budget:1300, type:'expense' },
-    { id:'cat4', name:'定期定額', color:'#26de81', budget:2000, type:'expense' },
-    { id:'cat5', name:'機車', color:'#45aaf2', budget:2000, type:'expense' },
-    { id:'cat6', name:'日用品', color:'#fd79a8', budget:1000, type:'expense' },
-    { id:'cat7', name:'撲克麻將', color:'#a29bfe', budget:500, type:'expense' },
-    { id:'cat8', name:'交通', color:'#74b9ff', budget:600, type:'expense' },
-    { id:'cat9', name:'外送收入', color:'#00e5a0', budget:0, type:'income' },
-    { id:'cat10', name:'家裡支援', color:'#7bed9f', budget:0, type:'income' },
-    { id:'cat11', name:'其他收入', color:'#55efc4', budget:0, type:'income' },
+    { id:'cat1',  name:'飲食',     color:'#ff6b6b', budget:7500, type:'expense' },
+    { id:'cat2',  name:'虛擬',     color:'#f5c842', budget:1000, type:'expense' },
+    { id:'cat3',  name:'醫療',     color:'#ff9f43', budget:1300, type:'expense' },
+    { id:'cat4',  name:'定期定額', color:'#26de81', budget:2000, type:'expense' },
+    { id:'cat5',  name:'機車',     color:'#45aaf2', budget:2000, type:'expense' },
+    { id:'cat6',  name:'日用品',   color:'#fd79a8', budget:1000, type:'expense' },
+    { id:'cat7',  name:'撲克麻將', color:'#a29bfe', budget:500,  type:'expense' },
+    { id:'cat8',  name:'交通',     color:'#74b9ff', budget:600,  type:'expense' },
+    { id:'cat9',  name:'外送收入', color:'#00e5a0', budget:0,    type:'income'  },
+    { id:'cat10', name:'家裡支援', color:'#7bed9f', budget:0,    type:'income'  },
+    { id:'cat11', name:'其他收入', color:'#55efc4', budget:0,    type:'income'  },
   ],
   journal: [],
   history: [],
 };
 
 // ================================================================
-// AI 整合功能
-// ================================================================
-window.runAIAnalysis = async function() {
-  const btn = document.getElementById('aiStartBtn');
-  const resArea = document.getElementById('aiResponseArea');
-  
-  btn.disabled = true;
-  btn.textContent = '分析中...';
-  resArea.style.display = 'block';
-  resArea.innerHTML = '<div style="text-align:center; color:var(--muted); padding: 10px;">連結 AI 引擎並檢索資產數據中...</div>';
-
-  // 整理要送給 AI 的財務資料
-  const mk = getCurrentMonthKey();
-  const entries = getMonthJournal(mk);
-  const totalInc = entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
-  const totalExp = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
-
-  const payload = {
-    accounts: state.accounts,
-    investments: state.investments,
-    monthlyCashFlow: { income: totalInc, expense: totalExp, net: totalInc - totalExp }
-  };
-
-  const prompt = `
-    你是一個專業的財務與虛擬貨幣資產顧問。
-    請根據以下使用者的財務數據（JSON格式）：
-    ${JSON.stringify(payload)}
-
-    請對使用者整體財務狀況進行分析，但請將你的建議焦點【完全集中於虛擬貨幣（如 ETH、BTC）的資產配置現狀、BitoPro 或其他交易所的操作考量，以及是否需要冷錢包管理的風險評估】。
-    針對法定帳戶或 ETF 等傳統資產，僅需做為衡量「加碼虛擬貨幣的可用資金」來簡略帶過。
-    請用繁體中文回應，語氣專業且精練，直接給出分析與行動建議。
-  `;
-
-  try {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyCCaTFzXKKlAczepz_WJkVcPl23lHWuFjo', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    });
-    
-    const data = await response.json();
-    if(data.candidates && data.candidates[0].content.parts[0].text) {
-      let text = data.candidates[0].content.parts[0].text;
-      // 簡易 Markdown 解析
-      text = text.replace(/\\n/g, '<br>')
-                 .replace(/\n/g, '<br>')
-                 .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--blue); font-size: 14px;">$1</strong>');
-      resArea.innerHTML = text;
-    } else {
-      throw new Error("API 回傳格式錯誤");
-    }
-  } catch(e) {
-    resArea.innerHTML = '<div style="color:var(--red); padding: 10px;">分析失敗，請檢查 API 連線狀態。</div>';
-    console.error('AI Error:', e);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '重新分析';
-  }
-};
-
-// ================================================================
 // UTILS
 // ================================================================
 const STORAGE_KEY = 'finance_dashboard_v2';
-let currentEditType = null;
-let currentEditIndex = null;
-let journalFilter = 'all';
+let currentEditType = null, currentEditIndex = null, journalFilter = 'all';
+let ethPriceTWD = null, ethLastUpdated = null;
 
 function fmt(n){ return '$' + Math.round(Math.abs(n)).toLocaleString(); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function getCat(id){ return state.categories.find(c=>c.id===id); }
+function getAcc(id){ return state.accounts.find(a=>a.id===id); }
+function getCurrentMonthKey(){ const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`; }
+function getMonthJournal(mk){ return state.journal.filter(j=>j.date&&j.date.startsWith(mk)); }
+function sumByCategory(entries,type){ const m={}; entries.filter(e=>e.type===type).forEach(e=>{ m[e.categoryId]=(m[e.categoryId]||0)+e.amount; }); return m; }
+function randomColor(){ return ['#ff6b6b','#f5c842','#26de81','#45aaf2','#fd79a8','#a29bfe','#74b9ff','#ff9f43','#00cec9','#00e5a0'][Math.floor(Math.random()*10)]; }
 
 function saveState(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
   if(window._fbSave) window._fbSave(state);
   showToast('已儲存 ✓');
 }
 function loadState(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw=localStorage.getItem(STORAGE_KEY);
     if(raw){
-      const s = JSON.parse(raw);
+      const s=JSON.parse(raw);
       if(s.accounts)    state.accounts    = s.accounts;
       if(s.investments) state.investments = s.investments;
       if(s.categories)  state.categories  = s.categories;
       if(s.journal)     state.journal     = s.journal;
       if(s.history)     state.history     = s.history;
     }
-  }catch(e){ console.warn('讀取失敗',e); }
+  }catch(e){}
 }
 function showToast(msg){
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.style.opacity='1';
-  clearTimeout(t._t);
-  t._t = setTimeout(()=>{ t.style.opacity='0'; }, 2000);
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._t); t._t=setTimeout(()=>{ t.style.opacity='0'; },2000);
 }
-function getCat(id){ return state.categories.find(c=>c.id===id); }
-function getAcc(id){ return state.accounts.find(a=>a.id===id); }
-function getCurrentMonthKey(){
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-}
-function getMonthJournal(monthKey){
-  return state.journal.filter(j=> j.date && j.date.startsWith(monthKey));
-}
-function sumByCategory(entries, type){
-  const map = {};
-  entries.filter(e=>e.type===type).forEach(e=>{
-    map[e.categoryId] = (map[e.categoryId]||0) + e.amount;
-  });
-  return map;
+
+// ================================================================
+// AI 分析
+// ================================================================
+async function runAIAnalysis(){
+  const btn=document.getElementById('aiStartBtn');
+  const area=document.getElementById('aiResponseArea');
+  btn.disabled=true; btn.textContent='分析中...';
+  area.style.display='block';
+  area.innerHTML='<div style="text-align:center;color:var(--muted);padding:10px;">連結 AI 引擎並檢索資產數據中...</div>';
+
+  const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
+  const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExp=entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const payload={ accounts:state.accounts, investments:state.investments, monthlyCashFlow:{ income:totalInc, expense:totalExp, net:totalInc-totalExp } };
+
+  const prompt=`你是一個專業的財務與虛擬貨幣資產顧問。請根據以下使用者的財務數據（JSON格式）：
+${JSON.stringify(payload)}
+
+請對使用者整體財務狀況進行分析，但請將你的建議焦點【完全集中於虛擬貨幣（如 ETH、BTC）的資產配置現狀、BitoPro 或其他交易所的操作考量，以及是否需要冷錢包管理的風險評估】。
+針對法定帳戶或 ETF 等傳統資產，僅需做為衡量「加碼虛擬貨幣的可用資金」來簡略帶過。
+請用繁體中文回應，語氣專業且精練，直接給出分析與行動建議。`;
+
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyAx2KWaEKfttbppgfVC8CVhYmG8XQmpM7w`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] })
+    });
+    const data=await res.json();
+    if(data.candidates&&data.candidates[0].content.parts[0].text){
+      let text=data.candidates[0].content.parts[0].text;
+      text=text.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+      area.innerHTML=text;
+    } else { throw new Error('格式錯誤'); }
+  }catch(e){
+    area.innerHTML='<div style="color:var(--red);padding:10px;">分析失敗，請檢查 API 連線狀態。</div>';
+    console.error('AI Error:',e);
+  }finally{
+    btn.disabled=false; btn.textContent='重新分析';
+  }
 }
 
 // ================================================================
 // RENDER ALL
 // ================================================================
 function renderAll(){
-  // 初始化日期與月份篩選（只在 appContent 顯示後才有意義）
-  const _now = new Date();
-  const dateEl = document.getElementById('currentDate');
-  const mfEl = document.getElementById('filterMonth');
-  if(dateEl) dateEl.textContent = `${_now.getFullYear()} 年 ${_now.getMonth()+1} 月 ${_now.getDate()} 日`;
-  if(mfEl && !mfEl.value) mfEl.value = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
-
-  renderHero();
-  renderJournal();
-  renderSummary();
-  renderAccounts();
-  renderInvestments();
-  renderBudgetSettings();
-  renderHistory();
+  const now=new Date();
+  const dateEl=document.getElementById('currentDate');
+  const mfEl=document.getElementById('filterMonth');
+  if(dateEl) dateEl.textContent=`${now.getFullYear()} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
+  if(mfEl&&!mfEl.value) mfEl.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderBudgetSettings(); renderHistory();
 }
 
 function renderHero(){
-  const acctTotal = state.accounts.reduce((s,a)=>s+a.value,0);
-  const investTWD = state.investments.reduce((s,i)=>{
-    if(i.type==='etf') return s + i.shares * i.currentPrice;
-    return s + i.currentTWD;
-  },0);
-  const total = acctTotal + investTWD;
-  const mk = getCurrentMonthKey();
-  const entries = getMonthJournal(mk);
-  const totalInc = entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
-  const totalExp = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
-  const flow = totalInc - totalExp;
-  document.getElementById('heroNetworth').textContent = fmt(total);
-  document.getElementById('heroAssets').textContent = fmt(total);
-  document.getElementById('heroLiabilities').textContent = '$0';
-  document.getElementById('heroRealInc').textContent = fmt(totalInc);
-  document.getElementById('heroRealExp').textContent = fmt(totalExp);
-  const fe = document.getElementById('heroFlow');
-  fe.textContent = (flow>=0?'+':'-') + fmt(flow);
-  fe.className = 'stat-num ' + (flow>=0?'green':'red');
+  const acctTotal=state.accounts.reduce((s,a)=>s+a.value,0);
+  const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
+  const total=acctTotal+investTWD;
+  const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
+  const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExp=entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const flow=totalInc-totalExp;
+  document.getElementById('heroNetworth').textContent=fmt(total);
+  document.getElementById('heroAssets').textContent=fmt(total);
+  document.getElementById('heroLiabilities').textContent='$0';
+  document.getElementById('heroRealInc').textContent=fmt(totalInc);
+  document.getElementById('heroRealExp').textContent=fmt(totalExp);
+  const fe=document.getElementById('heroFlow');
+  fe.textContent=(flow>=0?'+':'-')+fmt(flow);
+  fe.className='stat-num '+(flow>=0?'green':'red');
 }
 
 // ================================================================
-// JOURNAL TAB
+// JOURNAL
 // ================================================================
 function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach((b,i)=>{
-    const tabs=['journal','summary','assets','history'];
-    b.classList.toggle('active', tabs[i]===name);
+    b.classList.toggle('active',['journal','summary','assets','history'][i]===name);
   });
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
 }
 
 function setFilter(f){
-  journalFilter = f;
+  journalFilter=f;
   ['all','expense','income','transfer'].forEach(k=>{
-    const el = document.getElementById('filter-'+k);
-    if(el){ el.style.borderColor = k===f?'var(--accent)':''; el.style.color = k===f?'var(--accent)':''; }
+    const el=document.getElementById('filter-'+k);
+    if(el){ el.style.borderColor=k===f?'var(--accent)':''; el.style.color=k===f?'var(--accent)':''; }
   });
   renderJournal();
 }
 
 function renderJournal(){
-  const el = document.getElementById('journalList');
-  let entries = [...state.journal].sort((a,b)=>b.date.localeCompare(a.date));
-  const mf = document.getElementById('filterMonth');
-  if(mf && mf.value) entries = entries.filter(e=>e.date.startsWith(mf.value));
-  if(journalFilter !== 'all') entries = entries.filter(e=>e.type===journalFilter);
+  const el=document.getElementById('journalList');
+  let entries=[...state.journal].sort((a,b)=>b.date.localeCompare(a.date));
+  const mf=document.getElementById('filterMonth');
+  if(mf&&mf.value) entries=entries.filter(e=>e.date.startsWith(mf.value));
+  if(journalFilter!=='all') entries=entries.filter(e=>e.type===journalFilter);
 
   if(entries.length===0){
-    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;">尚無交易紀錄，點上方「＋ 新增交易」開始記帳</div>';
+    el.innerHTML='<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;">尚無交易紀錄，點上方「＋ 新增交易」開始記帳</div>';
     return;
   }
-  const groups = {};
+  const groups={};
   entries.forEach(e=>{ (groups[e.date]||(groups[e.date]=[])).push(e); });
 
-  el.innerHTML = Object.keys(groups).sort((a,b)=>b.localeCompare(a)).map(date=>{
-    const dayEntries = groups[date];
-    const dayInc = dayEntries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
-    const dayExp = dayEntries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
-    const dayTr  = dayEntries.filter(e=>e.type==='transfer').reduce((s,e)=>s+e.amount,0);
-    const [,m,d] = date.split('-');
-    return `
-      <div style="margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);">
-          <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);">${m}/${d}</span>
-          <span style="font-size:11px;">
-            ${dayInc>0?`<span style="color:var(--green);">+${fmt(dayInc)}</span>`:''}
-            ${dayExp>0?`<span style="color:var(--red);margin-left:6px;">-${fmt(dayExp)}</span>`:''}
-            ${dayTr>0?`<span style="color:var(--blue);margin-left:6px;">⇄${fmt(dayTr)}</span>`:''}
-          </span>
-        </div>
-        ${dayEntries.map(e=>{
-          if(e.type==='transfer'){
-            const fa=getAcc(e.fromAccountId), ta=getAcc(e.toAccountId);
-            return `<div class="journal-entry">
-              <div class="je-top">
-                <div class="je-left">
-                  <div style="display:flex;align-items:center;gap:6px;font-size:14px;">
-                    <span style="color:var(--blue);">⇄</span>
-                    <span>${fa?.name||'?'}</span>
-                    <span style="color:var(--muted);font-size:12px;">→</span>
-                    <span>${ta?.name||'?'}</span>
-                  </div>
-                  <div style="margin-top:4px;">
-                    <span class="je-cat" style="background:rgba(77,159,255,0.15);color:var(--blue);">轉帳</span>
-                    ${e.note?`<span style="font-size:11px;color:var(--muted);margin-left:6px;">📝 ${e.note}</span>`:''}
-                  </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span class="je-amount" style="color:var(--blue);">${fmt(e.amount)}</span>
-                  <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteTransferEntry('${e.id}')">刪除</button>
-                </div>
-              </div>
-            </div>`;
-          }
-          const cat=getCat(e.categoryId), acc=getAcc(e.accountId), isInc=e.type==='income';
+  el.innerHTML=Object.keys(groups).sort((a,b)=>b.localeCompare(a)).map(date=>{
+    const de=groups[date];
+    const dayInc=de.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+    const dayExp=de.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+    const dayTr =de.filter(e=>e.type==='transfer').reduce((s,e)=>s+e.amount,0);
+    const [,m,d]=date.split('-');
+    return `<div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);">
+        <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);">${m}/${d}</span>
+        <span style="font-size:11px;">
+          ${dayInc>0?`<span style="color:var(--green);">+${fmt(dayInc)}</span>`:''}
+          ${dayExp>0?`<span style="color:var(--red);margin-left:6px;">-${fmt(dayExp)}</span>`:''}
+          ${dayTr>0?`<span style="color:var(--blue);margin-left:6px;">⇄${fmt(dayTr)}</span>`:''}
+        </span>
+      </div>
+      ${de.map(e=>{
+        if(e.type==='transfer'){
+          const fa=getAcc(e.fromAccountId), ta=getAcc(e.toAccountId);
           return `<div class="journal-entry">
             <div class="je-top">
               <div class="je-left">
-                <div style="font-size:14px;">${cat?.name||'—'}</div>
-                <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
-                  ${cat?`<span class="je-cat" style="background:${cat.color}22;color:${cat.color};">${cat.name}</span>`:''}
-                  ${acc?`<span style="font-size:11px;color:var(--muted);">📁 ${acc.name}</span>`:''}
+                <div style="display:flex;align-items:center;gap:6px;font-size:14px;">
+                  <span style="color:var(--blue);">⇄</span>
+                  <span>${fa?.name||'?'}</span>
+                  <span style="color:var(--muted);font-size:12px;">→</span>
+                  <span>${ta?.name||'?'}</span>
+                </div>
+                <div style="margin-top:4px;">
+                  <span class="je-cat" style="background:rgba(77,159,255,0.15);color:var(--blue);">轉帳</span>
+                  ${e.note?`<span style="font-size:11px;color:var(--muted);margin-left:6px;">📝 ${e.note}</span>`:''}
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
-                <span class="je-amount ${isInc?'green':'red'}">${isInc?'+':'-'}${fmt(e.amount)}</span>
-                <button class="edit-btn" onclick="editJournalEntry('${e.id}')">編輯</button>
-                <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteJournalEntry('${e.id}')">刪除</button>
+                <span class="je-amount" style="color:var(--blue);">${fmt(e.amount)}</span>
+                <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteTransferEntry('${e.id}')">刪除</button>
               </div>
             </div>
           </div>`;
-        }).join('')}
-      </div>`;
+        }
+        const cat=getCat(e.categoryId), acc=getAcc(e.accountId), isInc=e.type==='income';
+        return `<div class="journal-entry">
+          <div class="je-top">
+            <div class="je-left">
+              <div style="font-size:14px;">${e.desc||cat?.name||'—'}</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+                ${cat?`<span class="je-cat" style="background:${cat.color}22;color:${cat.color};">${cat.name}</span>`:''}
+                ${acc?`<span style="font-size:11px;color:var(--muted);">📁 ${acc.name}</span>`:''}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="je-amount ${isInc?'green':'red'}">${isInc?'+':'-'}${fmt(e.amount)}</span>
+              <button class="edit-btn" onclick="editJournalEntry('${e.id}')">編輯</button>
+              <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteJournalEntry('${e.id}')">刪除</button>
+            </div>
+          </div>
+          ${e.note?`<div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:4px;">📝 ${e.note}</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
   }).join('');
 }
 
@@ -638,90 +634,67 @@ function renderJournal(){
 // JOURNAL MODAL
 // ================================================================
 function buildJournalFields(entry){
-  const expCats = state.categories.filter(c=>c.type==='expense');
-  const incCats = state.categories.filter(c=>c.type==='income');
-  const type = entry?.type||'expense';
-  const today = new Date().toISOString().slice(0,10);
+  const expCats=state.categories.filter(c=>c.type==='expense');
+  const incCats=state.categories.filter(c=>c.type==='income');
+  const type=entry?.type||'expense';
+  const today=new Date().toISOString().slice(0,10);
   return `
     <div class="radio-row">
       <button class="radio-btn sel-red ${type==='expense'?'selected':''}" id="rb-expense" onclick="selectType('expense')">支出</button>
       <button class="radio-btn ${type==='income'?'selected':''}" id="rb-income" onclick="selectType('income')">收入</button>
     </div>
-    <div class="form-group" style="margin-top:12px;">
-      <label>日期</label>
-      <input type="date" id="f_date" value="${entry?.date||today}">
-    </div>
-    <div class="form-group">
-      <label>金額 (TWD)</label>
-      <input type="number" id="f_amount" value="${entry?.amount||''}" placeholder="0" min="0">
-    </div>
-    <div class="form-group">
-      <label>類別</label>
-      <select id="f_cat">
-        <optgroup label="── 支出 ──">
-          ${expCats.map(c=>`<option value="${c.id}" ${entry?.categoryId===c.id?'selected':''}>${c.name}</option>`).join('')}
-        </optgroup>
-        <optgroup label="── 收入 ──">
-          ${incCats.map(c=>`<option value="${c.id}" ${entry?.categoryId===c.id?'selected':''}>${c.name}</option>`).join('')}
-        </optgroup>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>帳戶</label>
-      <select id="f_acc">
-        ${state.accounts.map(a=>`<option value="${a.id}" ${entry?.accountId===a.id?'selected':''}>${a.name}</option>`).join('')}
-      </select>
-    </div>`;
+    <div class="form-group" style="margin-top:12px;"><label>日期</label><input type="date" id="f_date" value="${entry?.date||today}"></div>
+    <div class="form-group"><label>金額 (TWD)</label><input type="number" id="f_amount" value="${entry?.amount||''}" placeholder="0" min="0"></div>
+    <div class="form-group"><label>類別</label><select id="f_cat">
+      <optgroup label="── 支出 ──">${expCats.map(c=>`<option value="${c.id}" ${entry?.categoryId===c.id?'selected':''}>${c.name}</option>`).join('')}</optgroup>
+      <optgroup label="── 收入 ──">${incCats.map(c=>`<option value="${c.id}" ${entry?.categoryId===c.id?'selected':''}>${c.name}</option>`).join('')}</optgroup>
+    </select></div>
+    <div class="form-group"><label>帳戶</label><select id="f_acc">
+      ${state.accounts.map(a=>`<option value="${a.id}" ${entry?.accountId===a.id?'selected':''}>${a.name}</option>`).join('')}
+    </select></div>
+    <div class="form-group"><label>備註（選填）</label><input type="text" id="f_desc" value="${entry?.desc||''}"></div>`;
 }
 
-let _journalType = 'expense';
+let _journalType='expense';
 function selectType(t){
-  _journalType = t;
-  document.getElementById('rb-expense').classList.toggle('selected', t==='expense');
-  document.getElementById('rb-income').classList.toggle('selected', t==='income');
+  _journalType=t;
+  document.getElementById('rb-expense').classList.toggle('selected',t==='expense');
+  document.getElementById('rb-income').classList.toggle('selected',t==='income');
 }
 function openJournalModal(entry){
-  _journalType = entry?.type||'expense';
-  currentEditType = entry?'journal_edit':'journal_new';
-  currentEditIndex = entry?.id||null;
-  openModal('新增交易', buildJournalFields(entry), entry?'儲存':'新增');
+  _journalType=entry?.type||'expense';
+  currentEditType=entry?'journal_edit':'journal_new';
+  currentEditIndex=entry?.id||null;
+  openModal('新增交易',buildJournalFields(entry),entry?'儲存':'新增');
 }
-function editJournalEntry(id){
-  const e = state.journal.find(e=>e.id===id);
-  if(e) openJournalModal(e);
-}
+function editJournalEntry(id){ const e=state.journal.find(e=>e.id===id); if(e) openJournalModal(e); }
 function deleteJournalEntry(id){
   if(!confirm('確定刪除？帳戶餘額將自動還原。')) return;
-  const e = state.journal.find(e=>e.id===id);
-  if(e){
-    const acc = getAcc(e.accountId);
-    if(acc){ if(e.type==='expense') acc.value += e.amount; else acc.value -= e.amount; }
-  }
-  state.journal = state.journal.filter(e=>e.id!==id);
+  const e=state.journal.find(e=>e.id===id);
+  if(e){ const acc=getAcc(e.accountId); if(acc){ if(e.type==='expense') acc.value+=e.amount; else acc.value-=e.amount; } }
+  state.journal=state.journal.filter(e=>e.id!==id);
   saveState(); renderAll(); showToast('已刪除，餘額已還原');
 }
 function saveJournalEntry(){
-  const amount = parseFloat(document.getElementById('f_amount').value)||0;
-  const date   = document.getElementById('f_date').value;
-  const categoryId = document.getElementById('f_cat').value;
-  const accountId  = document.getElementById('f_acc').value;
+  const amount=parseFloat(document.getElementById('f_amount').value)||0;
+  const date=document.getElementById('f_date').value;
+  const categoryId=document.getElementById('f_cat').value;
+  const accountId=document.getElementById('f_acc').value;
+  const desc=document.getElementById('f_desc')?.value.trim()||'';
   if(!amount||!date){ alert('請填寫日期和金額'); return; }
-
-  // 判斷類別是否屬於收入，強制對齊 type
-  const cat = getCat(categoryId);
-  const inferredType = cat ? cat.type : _journalType;
-
-  const entry = { id: currentEditIndex||uid(), type: inferredType, date, amount, categoryId, accountId };
-  const acc = getAcc(accountId);
+  const cat=getCat(categoryId);
+  const inferredType=cat?cat.type:_journalType;
+  const entry={ id:currentEditIndex||uid(), type:inferredType, date, amount, categoryId, accountId, desc };
+  const acc=getAcc(accountId);
   if(acc){
     if(currentEditType==='journal_edit'){
-      const old = state.journal.find(e=>e.id===currentEditIndex);
+      const old=state.journal.find(e=>e.id===currentEditIndex);
       if(old){ const oa=getAcc(old.accountId); if(oa){ if(old.type==='expense') oa.value+=old.amount; else oa.value-=old.amount; } }
     }
-    if(entry.type==='expense') acc.value -= amount; else acc.value += amount;
+    if(entry.type==='expense') acc.value-=amount; else acc.value+=amount;
   }
   if(currentEditType==='journal_edit'){
-    const idx = state.journal.findIndex(e=>e.id===currentEditIndex);
+    const idx=state.journal.findIndex(e=>e.id===currentEditIndex);
     if(idx>=0) state.journal[idx]=entry;
   } else { state.journal.push(entry); }
   saveState(); closeModal(); renderAll();
@@ -733,8 +706,8 @@ function saveJournalEntry(){
 // ================================================================
 function openTransferModal(){
   currentEditType='transfer_new';
-  const today = new Date().toISOString().slice(0,10);
-  const opts = state.accounts.map(a=>`<option value="${a.id}">${a.name} (${fmt(a.value)})</option>`).join('');
+  const today=new Date().toISOString().slice(0,10);
+  const opts=state.accounts.map(a=>`<option value="${a.id}">${a.name} (${fmt(a.value)})</option>`).join('');
   openModal('帳戶轉帳',`
     <div style="background:rgba(77,159,255,0.08);border:1px solid rgba(77,159,255,0.25);border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--blue);">
       ⇄ 轉帳不計入收支統計，僅調整帳戶餘額
@@ -748,28 +721,28 @@ function openTransferModal(){
   '確認轉帳');
 }
 function saveTransferEntry(){
-  const date   = document.getElementById('f_transfer_date').value;
-  const fromId = document.getElementById('f_from_acc').value;
-  const toId   = document.getElementById('f_to_acc').value;
-  const amount = parseFloat(document.getElementById('f_transfer_amount').value)||0;
-  const note   = document.getElementById('f_transfer_note').value.trim();
+  const date=document.getElementById('f_transfer_date').value;
+  const fromId=document.getElementById('f_from_acc').value;
+  const toId=document.getElementById('f_to_acc').value;
+  const amount=parseFloat(document.getElementById('f_transfer_amount').value)||0;
+  const note=document.getElementById('f_transfer_note').value.trim();
   if(!amount||!date){ alert('請填寫日期和金額'); return; }
   if(fromId===toId){ alert('來源與目標帳戶不能相同'); return; }
   const fa=getAcc(fromId), ta=getAcc(toId);
   if(!fa||!ta){ alert('帳戶不存在'); return; }
-  if(fa.value < amount){ if(!confirm(`來源帳戶餘額不足（${fmt(fa.value)}），確定繼續？`)) return; }
-  fa.value -= amount; ta.value += amount;
+  if(fa.value<amount){ if(!confirm(`來源帳戶餘額不足（${fmt(fa.value)}），確定繼續？`)) return; }
+  fa.value-=amount; ta.value+=amount;
   state.journal.push({ id:uid(), type:'transfer', date, amount, fromAccountId:fromId, toAccountId:toId, note });
   saveState(); closeModal(); renderAll(); showToast(`⇄ 轉帳 ${fmt(amount)} 完成`);
 }
 function deleteTransferEntry(id){
   if(!confirm('確定刪除轉帳？帳戶餘額將自動還原。')) return;
-  const e = state.journal.find(e=>e.id===id);
+  const e=state.journal.find(e=>e.id===id);
   if(e&&e.type==='transfer'){
     const fa=getAcc(e.fromAccountId), ta=getAcc(e.toAccountId);
-    if(fa) fa.value += e.amount; if(ta) ta.value -= e.amount;
+    if(fa) fa.value+=e.amount; if(ta) ta.value-=e.amount;
   }
-  state.journal = state.journal.filter(e=>e.id!==id);
+  state.journal=state.journal.filter(e=>e.id!==id);
   saveState(); renderAll(); showToast('轉帳已刪除，餘額已還原');
 }
 
@@ -777,63 +750,52 @@ function deleteTransferEntry(id){
 // SUMMARY
 // ================================================================
 function renderSummary(){
-  const mk = getCurrentMonthKey();
-  const entries = getMonthJournal(mk);
-  const incMap = sumByCategory(entries,'income');
-  const expMap = sumByCategory(entries,'expense');
-  const totalInc = Object.values(incMap).reduce((s,v)=>s+v,0);
-  const totalExp = Object.values(expMap).reduce((s,v)=>s+v,0);
-  document.getElementById('realIncTotal').textContent = fmt(totalInc);
-  document.getElementById('realExpTotal').textContent = fmt(totalExp);
+  const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
+  const incMap=sumByCategory(entries,'income'), expMap=sumByCategory(entries,'expense');
+  const totalInc=Object.values(incMap).reduce((s,v)=>s+v,0);
+  const totalExp=Object.values(expMap).reduce((s,v)=>s+v,0);
+  document.getElementById('realIncTotal').textContent=fmt(totalInc);
+  document.getElementById('realExpTotal').textContent=fmt(totalExp);
 
-  const incCats = state.categories.filter(c=>c.type==='income');
-  const incEl = document.getElementById('realIncList');
-  const incRows = incCats.filter(c=>incMap[c.id]>0);
-  incEl.innerHTML = incRows.length===0
-    ? '<div style="color:var(--muted);font-size:12px;">本月尚無收入紀錄</div>'
-    : incRows.map(c=>{
-        const v=incMap[c.id]||0, pct=totalInc>0?((v/totalInc)*100).toFixed(1):0;
-        return `<div class="expense-item"><div class="expense-row">
-          <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
-          <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;"><span style="color:var(--muted);">${pct}%</span><span class="green">${fmt(v)}</span></span>
-        </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div></div>`;
-      }).join('');
+  const renderBar=(cats,map,total,colorClass)=>cats.filter(c=>map[c.id]>0).map(c=>{
+    const v=map[c.id]||0, pct=total>0?((v/total)*100).toFixed(1):0;
+    return `<div class="expense-item"><div class="expense-row">
+      <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
+      <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
+        <span style="color:var(--muted);">${pct}%</span>
+        <span class="${colorClass}">${fmt(v)}</span>
+      </span>
+    </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div></div>`;
+  }).join('');
 
-  const expCats = state.categories.filter(c=>c.type==='expense');
-  const expEl = document.getElementById('realExpList');
-  const expRows = expCats.filter(c=>expMap[c.id]>0);
-  expEl.innerHTML = expRows.length===0
-    ? '<div style="color:var(--muted);font-size:12px;">本月尚無支出紀錄</div>'
-    : expRows.map(c=>{
-        const v=expMap[c.id]||0, pct=totalExp>0?((v/totalExp)*100).toFixed(1):0;
-        return `<div class="expense-item"><div class="expense-row">
-          <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
-          <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;"><span style="color:var(--muted);">${pct}%</span><span class="red">${fmt(v)}</span></span>
-        </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div></div>`;
-      }).join('');
+  const incCats=state.categories.filter(c=>c.type==='income');
+  const expCats=state.categories.filter(c=>c.type==='expense');
+  const incRows=renderBar(incCats,incMap,totalInc,'green');
+  const expRows=renderBar(expCats,expMap,totalExp,'red');
+  document.getElementById('realIncList').innerHTML=incRows||'<div style="color:var(--muted);font-size:12px;">本月尚無收入紀錄</div>';
+  document.getElementById('realExpList').innerHTML=expRows||'<div style="color:var(--muted);font-size:12px;">本月尚無支出紀錄</div>';
 
-  const budgetEl = document.getElementById('budgetList');
-  const budgetCats = expCats.filter(c=>c.budget>0);
-  budgetEl.innerHTML = budgetCats.length===0
-    ? '<div style="color:var(--muted);font-size:12px;">請至「資產管理」設定各類別預算</div>'
-    : budgetCats.map(c=>{
-        const spent=expMap[c.id]||0, pct=Math.min((spent/c.budget)*100,100).toFixed(0), over=spent>c.budget;
-        return `<div class="expense-item"><div class="expense-row">
-          <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
-          <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
-            <span style="color:${over?'var(--red)':'var(--muted)'};">${fmt(spent)}</span>
-            <span style="color:var(--muted);">/ ${fmt(c.budget)}</span>
-            ${over?`<span style="color:var(--red);font-size:10px;">超支</span>`:''}
-          </span>
-        </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${over?'var(--red)':c.color};"></div></div></div>`;
-      }).join('');
+  const budgetCats=expCats.filter(c=>c.budget>0);
+  document.getElementById('budgetList').innerHTML=budgetCats.length===0
+    ?'<div style="color:var(--muted);font-size:12px;">請至「資產管理」設定各類別預算</div>'
+    :budgetCats.map(c=>{
+      const spent=expMap[c.id]||0, pct=Math.min((spent/c.budget)*100,100).toFixed(0), over=spent>c.budget;
+      return `<div class="expense-item"><div class="expense-row">
+        <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
+        <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
+          <span style="color:${over?'var(--red)':'var(--muted)'};">${fmt(spent)}</span>
+          <span style="color:var(--muted);">/ ${fmt(c.budget)}</span>
+          ${over?`<span style="color:var(--red);font-size:10px;">超支</span>`:''}
+        </span>
+      </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${over?'var(--red)':c.color};"></div></div></div>`;
+    }).join('');
 }
 
 // ================================================================
 // ASSETS
 // ================================================================
 function renderAccounts(){
-  document.getElementById('accountsList').innerHTML = state.accounts.map((a,i)=>`
+  document.getElementById('accountsList').innerHTML=state.accounts.map((a,i)=>`
     <div class="list-item">
       <div><div class="item-name">${a.name}</div><div class="item-sub">${a.sub}</div></div>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -843,9 +805,8 @@ function renderAccounts(){
     </div>`).join('');
 }
 
-let ethPriceTWD=null, ethLastUpdated=null;
 function renderInvestments(){
-  document.getElementById('investList').innerHTML = state.investments.map((inv,i)=>{
+  document.getElementById('investList').innerHTML=state.investments.map((inv,i)=>{
     if(inv.type==='etf'){
       const gain=inv.shares*(inv.currentPrice-inv.costPrice), gainPct=((inv.currentPrice-inv.costPrice)/inv.costPrice*100).toFixed(2), up=gain>=0;
       return `<div class="invest-card">
@@ -867,7 +828,9 @@ function renderInvestments(){
       </div>`;
     } else {
       const gain=inv.currentTWD-inv.costTWD, gainPct=((gain/inv.costTWD)*100).toFixed(2), up=gain>=0;
-      const liveStr=inv.livePrice?`<span style="color:var(--green);font-size:10px;">● 即時</span> $${inv.livePrice.toLocaleString()} TWD/ETH`:`${inv.avgPrice.toLocaleString()} TWD（手動）`;
+      const liveStr=inv.livePrice
+        ?`<span style="color:var(--green);font-size:10px;">● 即時</span> $${inv.livePrice.toLocaleString()} TWD/ETH`
+        :`${inv.avgPrice.toLocaleString()} TWD（手動）`;
       const updStr=ethLastUpdated?ethLastUpdated.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}):'—';
       return `<div class="invest-card">
         <div class="invest-top">
@@ -887,11 +850,11 @@ function renderInvestments(){
         ${ethLastUpdated?`<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:right;">更新 ${updStr}</div>`:''}
       </div>`;
     }
-  }).join('') + `<button class="add-btn" onclick="addInvestItem()">＋ 新增投資項目</button>`;
+  }).join('')+`<button class="add-btn" onclick="addInvestItem()">＋ 新增投資項目</button>`;
 }
 
 function renderBudgetSettings(){
-  document.getElementById('budgetSettingList').innerHTML = state.categories.map((c,i)=>`
+  document.getElementById('budgetSettingList').innerHTML=state.categories.map((c,i)=>`
     <div class="list-item">
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="width:10px;height:10px;border-radius:50%;background:${c.color};display:inline-block;flex-shrink:0;"></span>
@@ -908,9 +871,9 @@ function renderBudgetSettings(){
 // HISTORY
 // ================================================================
 function renderHistory(){
-  const el = document.getElementById('historyList');
+  const el=document.getElementById('historyList');
   if(!state.history||state.history.length===0){ el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:10px;">尚無存檔紀錄</div>'; return; }
-  el.innerHTML = state.history.map((h,idx)=>{
+  el.innerHTML=state.history.map((h,idx)=>{
     const expD=(h.expBreakdown||[]).filter(e=>e.value>0).map(e=>`
       <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
         <span style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:7px;height:7px;border-radius:50%;background:${e.color||'#aaa'};display:inline-block;"></span>${e.name}</span>
@@ -940,14 +903,8 @@ function renderHistory(){
     </div>`;
   }).join('');
 }
-function toggleHist(idx){
-  const el=document.getElementById('hd-'+idx);
-  if(el) el.style.display=el.style.display==='block'?'none':'block';
-}
-function deleteHistory(idx){
-  if(!confirm('確定刪除？')) return;
-  state.history.splice(idx,1); saveState(); renderHistory();
-}
+function toggleHist(idx){ const el=document.getElementById('hd-'+idx); if(el) el.style.display=el.style.display==='block'?'none':'block'; }
+function deleteHistory(idx){ if(!confirm('確定刪除？')) return; state.history.splice(idx,1); saveState(); renderHistory(); }
 
 // ================================================================
 // ARCHIVE
@@ -961,7 +918,8 @@ function archiveMonth(){
   const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
   const netWorth=acctTotal+investTWD;
   const now=new Date();
-  const dy=now.getDate()<=5, defaultYear=dy?(now.getMonth()===0?now.getFullYear()-1:now.getFullYear()):now.getFullYear();
+  const dy=now.getDate()<=5;
+  const defaultYear=dy?(now.getMonth()===0?now.getFullYear()-1:now.getFullYear()):now.getFullYear();
   const defaultMonth=dy?(now.getMonth()===0?12:now.getMonth()):now.getMonth()+1;
   currentEditType='archive';
   openModal('📦 月底結算',`
@@ -981,7 +939,7 @@ function archiveMonth(){
 }
 function confirmArchive(){
   const raw=(document.getElementById('f_archiveMonth')?.value||'').trim();
-  if(!raw.match(/^\d{4}\/\d{2}$/)){ alert('格式錯誤，請輸入如 2026/03'); return; }
+  if(!raw.match(/^\d{4}\/\d{2}$/)) { alert('格式錯誤，請輸入如 2026/03'); return; }
   const [y,m]=raw.split('/'), monthKey=`${y} 年 ${parseInt(m)} 月`, mk=`${y}-${m}`;
   const entries=getMonthJournal(mk);
   const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
@@ -1015,9 +973,9 @@ function field(label,id,value,type='text'){
   return `<div class="form-group"><label>${label}</label><input type="${type}" id="${id}" value="${safe}"></div>`;
 }
 function saveModal(){
-  if(currentEditType==='transfer_new'){ saveTransferEntry(); return; }
-  if(currentEditType==='archive'){ confirmArchive(); return; }
-  if(currentEditType==='journal_new'||currentEditType==='journal_edit'){ saveJournalEntry(); return; }
+  if(currentEditType==='transfer_new')                               { saveTransferEntry(); return; }
+  if(currentEditType==='archive')                                    { confirmArchive(); return; }
+  if(currentEditType==='journal_new'||currentEditType==='journal_edit') { saveJournalEntry(); return; }
   if(currentEditType==='account_edit'){
     const a=state.accounts[currentEditIndex]; a.name=val('f_name'); a.sub=val('f_sub'); a.value=numval('f_value');
     saveState(); closeModal(); renderAccounts(); renderHero(); return;
@@ -1036,12 +994,14 @@ function saveModal(){
   }
   if(currentEditType==='invest_etf'){
     const inv=state.investments[currentEditIndex];
-    inv.name=val('f_name');inv.ticker=val('f_ticker');inv.shares=numval('f_shares');inv.costPrice=numval('f_cost');inv.currentPrice=numval('f_price');inv.breakeven=numval('f_breakeven');
+    inv.name=val('f_name'); inv.ticker=val('f_ticker'); inv.shares=numval('f_shares');
+    inv.costPrice=numval('f_cost'); inv.currentPrice=numval('f_price'); inv.breakeven=numval('f_breakeven');
     saveState(); closeModal(); renderInvestments(); renderHero(); return;
   }
   if(currentEditType==='invest_crypto'){
     const inv=state.investments[currentEditIndex];
-    inv.name=val('f_name');inv.ticker=val('f_ticker');inv.amount=parseFloat(val('f_amount'))||0;inv.costTWD=numval('f_cost');inv.currentTWD=numval('f_current');inv.avgPrice=numval('f_avg');
+    inv.name=val('f_name'); inv.ticker=val('f_ticker'); inv.amount=parseFloat(val('f_amount'))||0;
+    inv.costTWD=numval('f_cost'); inv.currentTWD=numval('f_current'); inv.avgPrice=numval('f_avg');
     saveState(); closeModal(); renderInvestments(); renderHero(); return;
   }
   if(currentEditType==='invest_new_etf'){
@@ -1087,7 +1047,7 @@ function editInvestItem(i){
 function deleteInvest(i){ if(!confirm('確定刪除？')) return; state.investments.splice(i,1); saveState(); closeModal(); renderInvestments(); renderHero(); }
 
 // ================================================================
-// ETH
+// ETH 即時價格
 // ================================================================
 async function fetchETHPrice(){
   const btn=document.getElementById('ethRefreshBtn');
@@ -1119,13 +1079,16 @@ function importData(){
       try{
         const p=JSON.parse(ev.target.result);
         if(p.categories){
-          if(p.accounts) state.accounts=p.accounts; if(p.investments) state.investments=p.investments;
-          if(p.categories) state.categories=p.categories; if(p.journal) state.journal=p.journal;
-          if(p.history) state.history=p.history;
+          if(p.accounts)    state.accounts    = p.accounts;
+          if(p.investments) state.investments = p.investments;
+          if(p.categories)  state.categories  = p.categories;
+          if(p.journal)     state.journal     = p.journal;
+          if(p.history)     state.history     = p.history;
           saveState(); renderAll(); showToast('匯入成功 ✓');
         } else {
-          if(p.accounts) state.accounts=p.accounts.map(a=>({...a,id:a.id||uid()}));
-          if(p.investments) state.investments=p.investments; if(p.history) state.history=p.history;
+          if(p.accounts)    state.accounts    = p.accounts.map(a=>({...a,id:a.id||uid()}));
+          if(p.investments) state.investments = p.investments;
+          if(p.history)     state.history     = p.history;
           saveState(); renderAll(); showToast('舊版資料已匯入 ✓');
         }
       }catch(e){ alert('JSON 格式錯誤'); }
@@ -1135,14 +1098,11 @@ function importData(){
   input.click();
 }
 
-function randomColor(){
-  return ['#ff6b6b','#f5c842','#26de81','#45aaf2','#fd79a8','#a29bfe','#74b9ff','#ff9f43','#00cec9','#00e5a0'][Math.floor(Math.random()*10)];
-}
-
+// ================================================================
+// INIT
+// ================================================================
 document.getElementById('modalOverlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
-
-// localStorage 預載（Firebase 登入後會覆蓋）
-loadState();
+loadState(); // Firebase 登入後會覆蓋
 </script>
 </body>
 </html>
