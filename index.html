@@ -261,6 +261,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <button class="edit-btn" onclick="importData()" style="font-size:12px;padding:6px 13px;">⬆ 匯入</button>
       <button class="edit-btn" onclick="exportData()" style="font-size:12px;padding:6px 13px;border-color:rgba(0,229,160,0.4);color:var(--green);">⬇ 匯出</button>
+      <button class="edit-btn" onclick="openApiKeyModal()" style="font-size:12px;padding:6px 13px;border-color:rgba(245,200,66,0.4);color:var(--yellow);">⚙ 設定</button>
       <div style="display:flex;align-items:center;gap:8px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">
         <img id="userAvatar" src="" width="22" height="22" style="border-radius:50%;object-fit:cover;">
         <span id="userName" style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
@@ -282,7 +283,19 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     </div>
   </div>
 
-
+  <!-- AI 診斷 -->
+  <div class="card" style="border-color:var(--blue);background:rgba(77,159,255,0.05);margin-bottom:20px;">
+    <div class="section-header" style="margin-bottom:0;">
+      <div class="card-title" style="color:var(--blue);display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">🤖</span> 財務 AI 診斷（Gemini）
+      </div>
+      <button class="btn" id="aiStartBtn" onclick="runAIAnalysis()"
+        style="flex:none;background:rgba(77,159,255,0.15);color:var(--blue);border:1px solid var(--blue);padding:7px 18px;font-size:13px;">
+        開始分析
+      </button>
+    </div>
+    <div id="aiResponseArea" class="ai-result" style="display:none;"></div>
+  </div>
 
   <!-- Tabs -->
   <div class="tab-bar">
@@ -453,6 +466,63 @@ function showToast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.style.opacity='1';
   clearTimeout(t._t); t._t=setTimeout(()=>{ t.style.opacity='0'; },2000);
+}
+
+// ================================================================
+// AI 分析（Claude API）
+// ================================================================
+function safeMarkdown(text){
+  // 安全轉換 markdown，避免 XSS：先跳脫 HTML，再套用格式
+  const escaped = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+  return escaped
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br>');
+}
+
+async function runAIAnalysis(){
+  const btn=document.getElementById('aiStartBtn');
+  const area=document.getElementById('aiResponseArea');
+  btn.disabled=true; btn.textContent='分析中...';
+  area.style.display='block';
+  area.innerHTML='<div style="text-align:center;color:var(--muted);padding:10px;">🤖 連結 Claude AI 並檢索資產數據中...</div>';
+
+  const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
+  const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExp=entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const payload={ accounts:state.accounts, investments:state.investments, monthlyCashFlow:{ income:totalInc, expense:totalExp, net:totalInc-totalExp } };
+
+  const prompt=`你是一個專業的財務與虛擬貨幣資產顧問。請根據以下使用者的財務數據（JSON格式）：
+${JSON.stringify(payload,null,2)}
+
+請對使用者整體財務狀況進行分析，但請將你的建議焦點【完全集中於虛擬貨幣（如 ETH、BTC）的資產配置現狀、BitoPro 或其他交易所的操作考量，以及是否需要冷錢包管理的風險評估】。
+針對法定帳戶或 ETF 等傳統資產，僅需做為衡量「加碼虛擬貨幣的可用資金」來簡略帶過。
+請用繁體中文回應，語氣專業且精練，直接給出分析與行動建議。使用 **粗體** 標注重點。`;
+
+  const geminiKey = localStorage.getItem('gemini_api_key');
+  if(!geminiKey){
+    area.innerHTML='<div style="color:var(--yellow);padding:10px;">⚠️ 尚未設定 Gemini API 金鑰，請點右上角「⚙ 設定」輸入。</div>';
+    btn.disabled=false; btn.textContent='開始分析';
+    return;
+  }
+
+  try{
+    const res=await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+geminiKey,
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] }) }
+    );
+    const data=await res.json();
+    if(data.candidates&&data.candidates[0]?.content?.parts?.[0]?.text){
+      area.innerHTML=safeMarkdown(data.candidates[0].content.parts[0].text);
+    } else { throw new Error(data.error?.message||'回應格式錯誤'); }
+  }catch(e){
+    area.innerHTML='<div style="color:var(--red);padding:10px;">分析失敗：'+e.message+'</div>';
+    console.error('Gemini AI Error:',e);
+  }finally{
+    btn.disabled=false; btn.textContent='重新分析';
+  }
 }
 
 // ================================================================
@@ -926,6 +996,7 @@ function field(label,id,value,type='text'){
 }
 function saveModal(){
   if(currentEditType==='invest_type_select')                           { return; }
+  if(currentEditType==='apikey')                                       { saveApiKey(); return; }
   if(currentEditType==='transfer_new')                               { saveTransferEntry(); return; }
   if(currentEditType==='archive')                                    { confirmArchive(); return; }
   if(currentEditType==='journal_new'||currentEditType==='journal_edit') { saveJournalEntry(); return; }
@@ -1089,6 +1160,36 @@ function importData(){
 // ================================================================
 // API KEY SETTINGS
 // ================================================================
+function openApiKeyModal(){
+  const current = localStorage.getItem('gemini_api_key') || '';
+  const masked = current ? current.slice(0,8)+'••••••••••••••••••••'+current.slice(-4) : '';
+  currentEditType = 'apikey';
+  openModal('⚙ Gemini API 金鑰設定', `
+    <div style="background:rgba(245,200,66,0.08);border:1px solid rgba(245,200,66,0.25);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--yellow);">
+      🔒 金鑰只儲存在你的瀏覽器本機，不會上傳到任何伺服器
+    </div>
+    ${current ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">目前金鑰：${masked}</div>` : ''}
+    <div class="form-group">
+      <label>貼上你的 Gemini API 金鑰</label>
+      <input type="password" id="f_apikey" placeholder="AIzaSy..." value="">
+    </div>
+    ${current ? `<button class="btn btn-danger" style="width:100%;margin-top:4px;margin-bottom:8px;" onclick="clearApiKey()">清除金鑰</button>` : ''}
+  `, '儲存金鑰');
+}
+function saveApiKey(){
+  const key = document.getElementById('f_apikey')?.value.trim();
+  if(!key){ alert('請輸入 API 金鑰'); return; }
+  if(!key.startsWith('AIza')){ alert('金鑰格式不正確，應以 AIza 開頭'); return; }
+  localStorage.setItem('gemini_api_key', key);
+  closeModal();
+  showToast('✓ API 金鑰已儲存');
+}
+function clearApiKey(){
+  if(!confirm('確定清除 API 金鑰？')) return;
+  localStorage.removeItem('gemini_api_key');
+  closeModal();
+  showToast('金鑰已清除');
+}
 
 document.getElementById('modalOverlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
 loadState(); // Firebase 登入後會覆蓋
