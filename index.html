@@ -17,6 +17,8 @@ import { getFirestore, doc, setDoc, getDoc }
   from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
 
 const firebaseConfig = {
+  // ⚠️ Firebase 設定已由 Firebase Security Rules 保護
+  // 建議在 Firebase Console 限制此金鑰的允許網域
   apiKey: "AIzaSyDWr4lUqAsU_Fij-hnjEHryC3bsf2rMk2I",
   authDomain: "money-873d5.firebaseapp.com",
   projectId: "money-873d5",
@@ -30,6 +32,7 @@ const auth = getAuth(app);
 const db   = getFirestore(app);
 const provider = new GoogleAuthProvider();
 let currentUser = null;
+let ethInterval = null;
 
 // 防抖 1.5s
 let _fbSaveTimer = null;
@@ -81,8 +84,10 @@ onAuthStateChanged(auth, async (user) => {
     }
     renderAll();
     fetchETHPrice();
-    setInterval(fetchETHPrice, 60000);
+    if(ethInterval) clearInterval(ethInterval);
+    ethInterval = setInterval(fetchETHPrice, 60000);
   } else {
+    if(ethInterval){ clearInterval(ethInterval); ethInterval=null; }
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appContent').style.display  = 'none';
   }
@@ -281,7 +286,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
   <div class="card" style="border-color:var(--blue);background:rgba(77,159,255,0.05);margin-bottom:20px;">
     <div class="section-header" style="margin-bottom:0;">
       <div class="card-title" style="color:var(--blue);display:flex;align-items:center;gap:8px;">
-        <span style="font-size:16px;">🤖</span> 虛擬資產與財務 AI 診斷
+        <span style="font-size:16px;">🤖</span> 財務 AI 診斷（Claude）
       </div>
       <button class="btn" id="aiStartBtn" onclick="runAIAnalysis()"
         style="flex:none;background:rgba(77,159,255,0.15);color:var(--blue);border:1px solid var(--blue);padding:7px 18px;font-size:13px;">
@@ -463,14 +468,24 @@ function showToast(msg){
 }
 
 // ================================================================
-// AI 分析
+// AI 分析（Claude API）
 // ================================================================
+function safeMarkdown(text){
+  // 安全轉換 markdown，避免 XSS：先跳脫 HTML，再套用格式
+  const escaped = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+  return escaped
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br>');
+}
+
 async function runAIAnalysis(){
   const btn=document.getElementById('aiStartBtn');
   const area=document.getElementById('aiResponseArea');
   btn.disabled=true; btn.textContent='分析中...';
   area.style.display='block';
-  area.innerHTML='<div style="text-align:center;color:var(--muted);padding:10px;">連結 AI 引擎並檢索資產數據中...</div>';
+  area.innerHTML='<div style="text-align:center;color:var(--muted);padding:10px;">🤖 連結 Claude AI 並檢索資產數據中...</div>';
 
   const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
   const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
@@ -478,26 +493,29 @@ async function runAIAnalysis(){
   const payload={ accounts:state.accounts, investments:state.investments, monthlyCashFlow:{ income:totalInc, expense:totalExp, net:totalInc-totalExp } };
 
   const prompt=`你是一個專業的財務與虛擬貨幣資產顧問。請根據以下使用者的財務數據（JSON格式）：
-${JSON.stringify(payload)}
+${JSON.stringify(payload,null,2)}
 
 請對使用者整體財務狀況進行分析，但請將你的建議焦點【完全集中於虛擬貨幣（如 ETH、BTC）的資產配置現狀、BitoPro 或其他交易所的操作考量，以及是否需要冷錢包管理的風險評估】。
 針對法定帳戶或 ETF 等傳統資產，僅需做為衡量「加碼虛擬貨幣的可用資金」來簡略帶過。
-請用繁體中文回應，語氣專業且精練，直接給出分析與行動建議。`;
+請用繁體中文回應，語氣專業且精練，直接給出分析與行動建議。使用 **粗體** 標注重點。`;
 
   try{
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyAx2KWaEKfttbppgfVC8CVhYmG8XQmpM7w`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] })
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{ role:'user', content:prompt }]
+      })
     });
     const data=await res.json();
-    if(data.candidates&&data.candidates[0].content.parts[0].text){
-      let text=data.candidates[0].content.parts[0].text;
-      text=text.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
-      area.innerHTML=text;
-    } else { throw new Error('格式錯誤'); }
+    if(data.content&&data.content[0]&&data.content[0].text){
+      area.innerHTML=safeMarkdown(data.content[0].text);
+    } else { throw new Error(data.error?.message||'格式錯誤'); }
   }catch(e){
-    area.innerHTML='<div style="color:var(--red);padding:10px;">分析失敗，請檢查 API 連線狀態。</div>';
-    console.error('AI Error:',e);
+    area.innerHTML='<div style="color:var(--red);padding:10px;">分析失敗：'+e.message+'</div>';
+    console.error('Claude AI Error:',e);
   }finally{
     btn.disabled=false; btn.textContent='重新分析';
   }
@@ -529,7 +547,8 @@ function renderHero(){
   document.getElementById('heroRealInc').textContent=fmt(totalInc);
   document.getElementById('heroRealExp').textContent=fmt(totalExp);
   const fe=document.getElementById('heroFlow');
-  fe.textContent=(flow>=0?'+':'-')+fmt(flow);
+  const absFlow=Math.round(Math.abs(flow));
+  fe.textContent=(flow>=0?'+$':'-$')+absFlow.toLocaleString();
   fe.className='stat-num '+(flow>=0?'green':'red');
 }
 
@@ -972,6 +991,7 @@ function field(label,id,value,type='text'){
   return `<div class="form-group"><label>${label}</label><input type="${type}" id="${id}" value="${safe}"></div>`;
 }
 function saveModal(){
+  if(currentEditType==='invest_type_select')                           { return; }
   if(currentEditType==='transfer_new')                               { saveTransferEntry(); return; }
   if(currentEditType==='archive')                                    { confirmArchive(); return; }
   if(currentEditType==='journal_new'||currentEditType==='journal_edit') { saveJournalEntry(); return; }
@@ -1034,9 +1054,35 @@ function editCategory(i){
 function deleteCategory(i){ if(!confirm('確定刪除？')) return; state.categories.splice(i,1); saveState(); closeModal(); renderBudgetSettings(); renderSummary(); }
 
 function addInvestItem(){
-  const isEtf=confirm('點「確定」新增 ETF，點「取消」新增虛擬貨幣');
-  if(isEtf){ currentEditType='invest_new_etf'; openModal('新增 ETF',field('名稱','f_name','')+field('代碼','f_ticker','')+field('持股數量','f_shares',0,'number')+field('成本均價','f_cost',0,'number')+field('現價','f_price',0,'number')+field('損益兩平價','f_breakeven',0,'number')); }
-  else { currentEditType='invest_new_crypto'; openModal('新增虛擬貨幣',field('名稱','f_name','')+field('代碼','f_ticker','')+field('持倉數量','f_amount',0)+field('成本 (TWD)','f_cost',0,'number')+field('現值 (TWD)','f_current',0,'number')+field('成交均價 (TWD)','f_avg',0,'number')); }
+  // 使用 modal 取代 confirm() 讓使用者選擇類型
+  currentEditType='invest_type_select';
+  openModal('新增投資項目',`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0;">
+      <button onclick="selectInvestType('etf')" style="padding:20px 10px;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.3);border-radius:12px;color:var(--green);font-size:14px;font-family:'Noto Sans TC',sans-serif;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(0,229,160,0.18)'" onmouseout="this.style.background='rgba(0,229,160,0.08)'">
+        <div style="font-size:24px;margin-bottom:8px;">📈</div>
+        <div style="font-weight:700;">ETF</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">006208、00878 等</div>
+      </button>
+      <button onclick="selectInvestType('crypto')" style="padding:20px 10px;background:rgba(245,200,66,0.08);border:1px solid rgba(245,200,66,0.3);border-radius:12px;color:var(--yellow);font-size:14px;font-family:'Noto Sans TC',sans-serif;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(245,200,66,0.18)'" onmouseout="this.style.background='rgba(245,200,66,0.08)'">
+        <div style="font-size:24px;margin-bottom:8px;">🪙</div>
+        <div style="font-weight:700;">虛擬貨幣</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">ETH、BTC 等</div>
+      </button>
+    </div>`, '');
+  // 隱藏儲存按鈕
+  document.getElementById('modalConfirmBtn').style.display='none';
+}
+function selectInvestType(type){
+  document.getElementById('modalConfirmBtn').style.display='';
+  if(type==='etf'){
+    currentEditType='invest_new_etf';
+    document.getElementById('modalTitle').textContent='新增 ETF';
+    document.getElementById('modalFields').innerHTML=field('名稱','f_name','')+field('代碼','f_ticker','')+field('持股數量','f_shares',0,'number')+field('成本均價','f_cost',0,'number')+field('現價','f_price',0,'number')+field('損益兩平價','f_breakeven',0,'number');
+  } else {
+    currentEditType='invest_new_crypto';
+    document.getElementById('modalTitle').textContent='新增虛擬貨幣';
+    document.getElementById('modalFields').innerHTML=field('名稱','f_name','')+field('代碼','f_ticker','')+field('持倉數量','f_amount',0)+field('成本 (TWD)','f_cost',0,'number')+field('現值 (TWD)','f_current',0,'number')+field('成交均價 (TWD)','f_avg',0,'number');
+  }
 }
 function editInvestItem(i){
   const inv=state.investments[i];
@@ -1077,18 +1123,24 @@ function importData(){
     reader.onload=ev=>{
       try{
         const p=JSON.parse(ev.target.result);
-        if(p.categories){
-          if(p.accounts)    state.accounts    = p.accounts;
-          if(p.investments) state.investments = p.investments;
-          if(p.categories)  state.categories  = p.categories;
-          if(p.journal)     state.journal     = p.journal;
-          if(p.history)     state.history     = p.history;
+        // 驗證基本結構
+        if(typeof p !== 'object' || p === null){ alert('資料格式錯誤'); return; }
+        if(p.categories && Array.isArray(p.categories)){
+          // 新版格式：需含 categories
+          if(p.accounts    && Array.isArray(p.accounts))    state.accounts    = p.accounts;
+          if(p.investments && Array.isArray(p.investments)) state.investments = p.investments;
+          if(p.categories  && Array.isArray(p.categories))  state.categories  = p.categories;
+          if(p.journal     && Array.isArray(p.journal))     state.journal     = p.journal;
+          if(p.history     && Array.isArray(p.history))     state.history     = p.history;
           saveState(); renderAll(); showToast('匯入成功 ✓');
-        } else {
-          if(p.accounts)    state.accounts    = p.accounts.map(a=>({...a,id:a.id||uid()}));
-          if(p.investments) state.investments = p.investments;
-          if(p.history)     state.history     = p.history;
+        } else if(p.accounts || p.investments || p.history){
+          // 舊版格式
+          if(p.accounts    && Array.isArray(p.accounts))    state.accounts    = p.accounts.map(a=>({...a,id:a.id||uid()}));
+          if(p.investments && Array.isArray(p.investments)) state.investments = p.investments;
+          if(p.history     && Array.isArray(p.history))     state.history     = p.history;
           saveState(); renderAll(); showToast('舊版資料已匯入 ✓');
+        } else {
+          alert('無法辨識的備份格式，請確認檔案正確');
         }
       }catch(e){ alert('JSON 格式錯誤'); }
     };
@@ -1105,3 +1157,4 @@ loadState(); // Firebase 登入後會覆蓋
 </script>
 </body>
 </html>
+
