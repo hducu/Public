@@ -28,10 +28,16 @@ const provider = new GoogleAuthProvider();
 
 let currentUser = null;
 
-window._fbSave = async function(stateObj) {
+// ── 防抖：1.5 秒內只送一次雲端儲存 ──
+let _fbSaveTimer = null;
+window._fbSave = function(stateObj) {
   if(!currentUser) return;
-  try { await setDoc(doc(db, 'users', currentUser.uid), JSON.parse(JSON.stringify(stateObj))); }
-  catch(e) { console.warn('雲端儲存失敗', e); }
+  clearTimeout(_fbSaveTimer);
+  _fbSaveTimer = setTimeout(async () => {
+    try {
+      await setDoc(doc(db, 'users', currentUser.uid), JSON.parse(JSON.stringify(stateObj)));
+    } catch(e) { console.warn('雲端儲存失敗', e); }
+  }, 1500);
 };
 
 window._fbLoad = async function() {
@@ -54,24 +60,32 @@ window._fbSignOut = async function() {
 
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
+  // 隱藏 loading
+  document.getElementById('loadingScreen').style.display = 'none';
+
   if(user) {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('userAvatar').src = user.photoURL || '';
     document.getElementById('userName').textContent = user.displayName || user.email;
 
+    // 優先用雲端資料，fallback 到 localStorage
     const cloud = await window._fbLoad();
     if(cloud) {
-      if(cloud.accounts) state.accounts = cloud.accounts;
+      if(cloud.accounts)    state.accounts    = cloud.accounts;
       if(cloud.investments) state.investments = cloud.investments;
-      if(cloud.categories) state.categories = cloud.categories;
-      if(cloud.journal) state.journal = cloud.journal;
-      if(cloud.history) state.history = cloud.history;
+      if(cloud.categories)  state.categories  = cloud.categories;
+      if(cloud.journal)     state.journal     = cloud.journal;
+      if(cloud.history)     state.history     = cloud.history;
+      // 同步到 localStorage
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
     } else {
+      // 雲端無資料，把 localStorage 的資料推上去
       window._fbSave(state);
     }
     renderAll();
     fetchETHPrice();
+    setInterval(fetchETHPrice, 60000);
   } else {
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appContent').style.display = 'none';
@@ -95,8 +109,6 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .card-title{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;font-family:'Space Mono',monospace;}
 .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
 .section-header .card-title{margin-bottom:0;}
-
-/* Hero */
 .hero{text-align:center;padding:28px 20px;background:linear-gradient(135deg,#161a24 0%,#1a2035 100%);border:1px solid var(--border);border-radius:20px;margin-bottom:16px;position:relative;overflow:hidden;}
 .hero::before{content:'';position:absolute;top:-60px;left:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(0,229,160,0.08) 0%,transparent 70%);pointer-events:none;}
 .hero-label{font-size:12px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:6px;}
@@ -105,15 +117,11 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .stat-item{text-align:center;}
 .stat-num{font-family:'Space Mono',monospace;font-size:17px;font-weight:700;}
 .stat-lbl{font-size:11px;color:var(--muted);margin-top:3px;}
-
-/* Tabs */
 .tab-bar{display:flex;gap:4px;margin-bottom:20px;background:var(--surface2);border-radius:12px;padding:4px;}
 .tab-btn{flex:1;padding:8px 12px;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;color:var(--muted);background:none;transition:all 0.2s;}
 .tab-btn.active{background:var(--surface);color:var(--text);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,0.3);}
 .tab-panel{display:none;}
 .tab-panel.active{display:block;}
-
-/* Buttons */
 .edit-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;transition:all 0.2s;font-family:'Noto Sans TC',sans-serif;}
 .edit-btn:hover{border-color:var(--accent);color:var(--accent);}
 .add-btn{width:100%;padding:11px;background:rgba(0,229,160,0.08);border:1px dashed rgba(0,229,160,0.3);border-radius:12px;color:var(--green);font-size:13px;cursor:pointer;transition:all 0.2s;font-family:'Noto Sans TC',sans-serif;margin-top:12px;}
@@ -123,21 +131,15 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .btn-primary{background:var(--green);color:#000;font-weight:700;}
 .btn-cancel{background:var(--border);color:var(--muted);}
 .btn-danger{background:var(--red);color:#fff;font-weight:700;}
-
-/* Account / list items */
 .list-item{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border);}
 .list-item:last-child{border-bottom:none;}
 .item-name{font-size:14px;}
 .item-sub{font-size:11px;color:var(--muted);margin-top:2px;}
 .item-val{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--green);}
-
-/* Bar */
 .expense-item{margin-bottom:13px;}
 .expense-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
 .bar-track{height:4px;background:var(--border);border-radius:4px;}
 .bar-fill{height:4px;border-radius:4px;transition:width 0.4s ease;}
-
-/* Investment card */
 .invest-card{background:var(--surface2);border-radius:12px;padding:15px;margin-bottom:12px;}
 .invest-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
 .invest-name{font-size:15px;font-weight:700;}
@@ -148,20 +150,13 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .invest-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .invest-stat-l{font-size:11px;color:var(--muted);}
 .invest-stat-v{font-size:13px;font-family:'Space Mono',monospace;margin-top:2px;}
-
-/* Journal */
 .journal-entry{padding:12px 0;border-bottom:1px solid var(--border);}
 .journal-entry:last-child{border-bottom:none;}
 .je-top{display:flex;justify-content:space-between;align-items:flex-start;}
 .je-left{flex:1;}
-.je-date{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;}
-.je-desc{font-size:14px;margin-top:2px;}
 .je-cat{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;margin-top:4px;font-family:'Space Mono',monospace;}
-.je-account{font-size:11px;color:var(--muted);margin-top:3px;}
 .je-amount{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;white-space:nowrap;margin-left:12px;}
 .je-actions{display:flex;gap:6px;margin-left:8px;align-items:center;}
-
-/* Modal */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px;width:92%;max-width:460px;max-height:88vh;overflow-y:auto;}
@@ -176,27 +171,24 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 .radio-btn{flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all 0.2s;text-align:center;}
 .radio-btn.selected{border-color:var(--accent);color:var(--accent);background:rgba(0,229,160,0.08);}
 .radio-btn.sel-red.selected{border-color:var(--red);color:var(--red);background:rgba(255,77,109,0.08);}
-
-/* Month tag */
 .month-tag{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);padding:3px 8px;border:1px solid var(--border);border-radius:6px;}
-
-/* Colors */
 .green{color:var(--green);}
 .red{color:var(--red);}
 .yellow{color:var(--yellow);}
-
-/* Toast */
 #toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#000;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;padding:10px 18px;border-radius:10px;box-shadow:0 4px 20px rgba(0,229,160,0.3);opacity:0;transition:opacity 0.3s;z-index:9999;pointer-events:none;}
-
-/* History */
 .hist-item{padding:12px 0;border-bottom:1px solid var(--border);}
 .hist-item:last-child{border-bottom:none;}
 .hist-detail{display:none;margin-top:10px;background:var(--surface2);border-radius:10px;padding:12px;}
+
+/* Loading & Login screens */
+#loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#loginScreen{display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
 </style>
 </head>
 <body>
 
-<!-- Modal -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <h2 id="modalTitle">編輯</h2>
@@ -209,8 +201,14 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 </div>
 <div id="toast"></div>
 
+<!-- Loading Screen（預設顯示，Firebase 回應後隱藏）-->
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:2px;">載入中...</div>
+</div>
+
 <!-- Login Screen -->
-<div id="loginScreen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:20px;">
+<div id="loginScreen">
   <div style="text-align:center;">
     <div style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:3px;margin-bottom:8px;">📊 財務儀表板</div>
     <div style="font-size:28px;font-weight:700;color:var(--green);margin-bottom:6px;">歡迎回來</div>
@@ -221,11 +219,10 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
   </button>
 </div>
 
-<!-- App Content -->
+<!-- App Content（登入後才顯示）-->
 <div id="appContent" style="display:none;">
 <div style="max-width:960px;margin:0 auto;">
 
-  <!-- Header -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
     <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:200px;">
       <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:2px;">📊 財務儀表板</span>
@@ -242,7 +239,6 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     </div>
   </div>
 
-  <!-- Hero -->
   <div class="hero">
     <div class="hero-label">淨資產</div>
     <div class="hero-value" id="heroNetworth">$0</div>
@@ -255,7 +251,6 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     </div>
   </div>
 
-  <!-- Tab bar -->
   <div class="tab-bar">
     <button class="tab-btn active" onclick="switchTab('journal')">📒 日記帳</button>
     <button class="tab-btn" onclick="switchTab('summary')">📊 本月摘要</button>
@@ -263,7 +258,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     <button class="tab-btn" onclick="switchTab('history')">📦 歷史存檔</button>
   </div>
 
-  <!-- ===== TAB: 日記帳 ===== -->
+  <!-- 日記帳 -->
   <div class="tab-panel active" id="tab-journal">
     <div class="card">
       <div class="section-header">
@@ -273,8 +268,6 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
           <button class="btn" style="flex:none;padding:7px 18px;font-size:13px;background:rgba(77,159,255,0.15);border:1px solid rgba(77,159,255,0.4);color:var(--blue);" onclick="openTransferModal()">⇄ 轉帳</button>
         </div>
       </div>
-
-      <!-- Date filter -->
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <button class="edit-btn" id="filter-all" onclick="setFilter('all')" style="border-color:var(--accent);color:var(--accent);">全部</button>
         <button class="edit-btn" id="filter-expense" onclick="setFilter('expense')">支出</button>
@@ -282,12 +275,11 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
         <button class="edit-btn" id="filter-transfer" onclick="setFilter('transfer')">轉帳</button>
         <input type="month" id="filterMonth" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 10px;font-size:12px;font-family:'Space Mono',monospace;outline:none;" onchange="renderJournal()">
       </div>
-
       <div id="journalList"></div>
     </div>
   </div>
 
-  <!-- ===== TAB: 本月摘要 ===== -->
+  <!-- 本月摘要 -->
   <div class="tab-panel" id="tab-summary">
     <div class="grid grid-2" style="margin-bottom:16px;">
       <div class="card">
@@ -306,14 +298,12 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       </div>
     </div>
     <div class="card">
-      <div class="section-header">
-        <div class="card-title">月度預算對照</div>
-      </div>
+      <div class="section-header"><div class="card-title">月度預算對照</div></div>
       <div id="budgetList"></div>
     </div>
   </div>
 
-  <!-- ===== TAB: 資產管理 ===== -->
+  <!-- 資產管理 -->
   <div class="tab-panel" id="tab-assets">
     <div class="grid grid-2" style="margin-bottom:16px;">
       <div class="card">
@@ -327,7 +317,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
         <div class="section-header">
           <div class="card-title">投資組合</div>
           <div style="display:flex;gap:6px;align-items:center;">
-            <button class="edit-btn" id="ethRefreshBtn" onclick="fetchETHPrice()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);" title="更新 ETH 即時價格">↻ ETH</button>
+            <button class="edit-btn" id="ethRefreshBtn" onclick="fetchETHPrice()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);">↻ ETH</button>
             <button class="edit-btn" onclick="addInvestItem()">＋ 新增</button>
           </div>
         </div>
@@ -343,7 +333,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     </div>
   </div>
 
-  <!-- ===== TAB: 歷史存檔 ===== -->
+  <!-- 歷史存檔 -->
   <div class="tab-panel" id="tab-history">
     <div class="card">
       <div class="section-header">
@@ -354,6 +344,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     </div>
   </div>
 
+</div>
 </div>
 
 <script>
@@ -371,7 +362,6 @@ let state = {
     { name:'富邦台50', ticker:'006208', shares:5, costPrice:172.00, currentPrice:174.45, breakeven:176.18, type:'etf' },
     { name:'以太幣', ticker:'ETH', amount:0.0222777, costTWD:1487, currentTWD:1428, avgPrice:66745, type:'crypto' }
   ],
-  // 支出類別（含預算）
   categories: [
     { id:'cat1', name:'飲食', color:'#ff6b6b', budget:7500, type:'expense' },
     { id:'cat2', name:'虛擬', color:'#f5c842', budget:1000, type:'expense' },
@@ -381,14 +371,11 @@ let state = {
     { id:'cat6', name:'日用品', color:'#fd79a8', budget:1000, type:'expense' },
     { id:'cat7', name:'撲克麻將', color:'#a29bfe', budget:500, type:'expense' },
     { id:'cat8', name:'交通', color:'#74b9ff', budget:600, type:'expense' },
-    // 收入類別
     { id:'cat9', name:'外送收入', color:'#00e5a0', budget:0, type:'income' },
     { id:'cat10', name:'家裡支援', color:'#7bed9f', budget:0, type:'income' },
     { id:'cat11', name:'其他收入', color:'#55efc4', budget:0, type:'income' },
   ],
-  // 日記帳交易紀錄
   journal: [],
-  // 月底結算歷史
   history: [],
 };
 
@@ -404,21 +391,20 @@ function fmt(n){ return '$' + Math.round(Math.abs(n)).toLocaleString(); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
 function saveState(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  catch(e){ console.warn('localStorage 儲存失敗',e); }
-  if(window._fbSave) window._fbSave(state).then(()=>showToast('已儲存 ✓')).catch(()=>showToast('已儲存（本機）✓'));
-  else showToast('已儲存 ✓');
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+  if(window._fbSave) window._fbSave(state);
+  showToast('已儲存 ✓');
 }
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){
       const s = JSON.parse(raw);
-      if(s.accounts) state.accounts = s.accounts;
+      if(s.accounts)    state.accounts    = s.accounts;
       if(s.investments) state.investments = s.investments;
-      if(s.categories) state.categories = s.categories;
-      if(s.journal) state.journal = s.journal;
-      if(s.history) state.history = s.history;
+      if(s.categories)  state.categories  = s.categories;
+      if(s.journal)     state.journal     = s.journal;
+      if(s.history)     state.history     = s.history;
     }
   }catch(e){ console.warn('讀取失敗',e); }
 }
@@ -428,12 +414,8 @@ function showToast(msg){
   clearTimeout(t._t);
   t._t = setTimeout(()=>{ t.style.opacity='0'; }, 2000);
 }
-
-// 取得某類別
 function getCat(id){ return state.categories.find(c=>c.id===id); }
 function getAcc(id){ return state.accounts.find(a=>a.id===id); }
-
-// 計算本月交易（收入/支出）按類別加總
 function getCurrentMonthKey(){
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -453,6 +435,13 @@ function sumByCategory(entries, type){
 // RENDER ALL
 // ================================================================
 function renderAll(){
+  // 初始化日期與月份篩選（只在 appContent 顯示後才有意義）
+  const _now = new Date();
+  const dateEl = document.getElementById('currentDate');
+  const mfEl = document.getElementById('filterMonth');
+  if(dateEl) dateEl.textContent = `${_now.getFullYear()} 年 ${_now.getMonth()+1} 月 ${_now.getDate()} 日`;
+  if(mfEl && !mfEl.value) mfEl.value = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
+
   renderHero();
   renderJournal();
   renderSummary();
@@ -469,13 +458,11 @@ function renderHero(){
     return s + i.currentTWD;
   },0);
   const total = acctTotal + investTWD;
-
   const mk = getCurrentMonthKey();
   const entries = getMonthJournal(mk);
   const totalInc = entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
   const totalExp = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
   const flow = totalInc - totalExp;
-
   document.getElementById('heroNetworth').textContent = fmt(total);
   document.getElementById('heroAssets').textContent = fmt(total);
   document.getElementById('heroLiabilities').textContent = '$0';
@@ -491,7 +478,7 @@ function renderHero(){
 // ================================================================
 function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach((b,i)=>{
-    const tabs = ['journal','summary','assets','history'];
+    const tabs=['journal','summary','assets','history'];
     b.classList.toggle('active', tabs[i]===name);
   });
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
@@ -509,22 +496,15 @@ function setFilter(f){
 
 function renderJournal(){
   const el = document.getElementById('journalList');
-  let entries = [...state.journal].sort((a,b)=> b.date.localeCompare(a.date));
-
-  // month filter
+  let entries = [...state.journal].sort((a,b)=>b.date.localeCompare(a.date));
   const mf = document.getElementById('filterMonth');
   if(mf && mf.value) entries = entries.filter(e=>e.date.startsWith(mf.value));
-
-  // type filter
   if(journalFilter !== 'all') entries = entries.filter(e=>e.type===journalFilter);
-  else entries = entries; // show all including transfers
 
   if(entries.length===0){
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;">尚無交易紀錄，點上方「＋ 新增交易」開始記帳</div>';
     return;
   }
-
-  // group by date
   const groups = {};
   entries.forEach(e=>{ (groups[e.date]||(groups[e.date]=[])).push(e); });
 
@@ -532,56 +512,47 @@ function renderJournal(){
     const dayEntries = groups[date];
     const dayInc = dayEntries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
     const dayExp = dayEntries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
-    const dayTransfer = dayEntries.filter(e=>e.type==='transfer').reduce((s,e)=>s+e.amount,0);
-    const [y,m,d] = date.split('-');
-    const dateLabel = `${m}/${d}`;
+    const dayTr  = dayEntries.filter(e=>e.type==='transfer').reduce((s,e)=>s+e.amount,0);
+    const [,m,d] = date.split('-');
     return `
       <div style="margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);">
-          <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);">${dateLabel}</span>
-          <span style="font-size:11px;color:var(--muted);">
+          <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);">${m}/${d}</span>
+          <span style="font-size:11px;">
             ${dayInc>0?`<span style="color:var(--green);">+${fmt(dayInc)}</span>`:''}
             ${dayExp>0?`<span style="color:var(--red);margin-left:6px;">-${fmt(dayExp)}</span>`:''}
-            ${dayTransfer>0?`<span style="color:var(--blue);margin-left:6px;">⇄${fmt(dayTransfer)}</span>`:''}
+            ${dayTr>0?`<span style="color:var(--blue);margin-left:6px;">⇄${fmt(dayTr)}</span>`:''}
           </span>
         </div>
         ${dayEntries.map(e=>{
-          const cat = getCat(e.categoryId);
-          const acc = getAcc(e.accountId);
-          const isInc = e.type==='income';
-          const isTransfer = e.type==='transfer';
-          if(isTransfer){
-            const fromAcc = getAcc(e.fromAccountId);
-            const toAcc = getAcc(e.toAccountId);
-            return `
-            <div class="journal-entry">
+          if(e.type==='transfer'){
+            const fa=getAcc(e.fromAccountId), ta=getAcc(e.toAccountId);
+            return `<div class="journal-entry">
               <div class="je-top">
                 <div class="je-left">
-                  <div class="je-desc" style="display:flex;align-items:center;gap:6px;">
+                  <div style="display:flex;align-items:center;gap:6px;font-size:14px;">
                     <span style="color:var(--blue);">⇄</span>
-                    <span>${fromAcc?.name||'?'}</span>
+                    <span>${fa?.name||'?'}</span>
                     <span style="color:var(--muted);font-size:12px;">→</span>
-                    <span>${toAcc?.name||'?'}</span>
+                    <span>${ta?.name||'?'}</span>
                   </div>
-                  <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+                  <div style="margin-top:4px;">
                     <span class="je-cat" style="background:rgba(77,159,255,0.15);color:var(--blue);">轉帳</span>
-                    ${e.note?`<span style="font-size:11px;color:var(--muted);">📝 ${e.note}</span>`:''}
+                    ${e.note?`<span style="font-size:11px;color:var(--muted);margin-left:6px;">📝 ${e.note}</span>`:''}
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;">
                   <span class="je-amount" style="color:var(--blue);">${fmt(e.amount)}</span>
-                  <div class="je-actions">
-                    <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteTransferEntry('${e.id}')">刪除</button>
-                  </div>
+                  <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteTransferEntry('${e.id}')">刪除</button>
                 </div>
               </div>
             </div>`;
           }
-          return `
-          <div class="journal-entry">
+          const cat=getCat(e.categoryId), acc=getAcc(e.accountId), isInc=e.type==='income';
+          return `<div class="journal-entry">
             <div class="je-top">
               <div class="je-left">
-                <div class="je-desc">${e.desc||cat?.name||'—'}</div>
+                <div style="font-size:14px;">${cat?.name||'—'}</div>
                 <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
                   ${cat?`<span class="je-cat" style="background:${cat.color}22;color:${cat.color};">${cat.name}</span>`:''}
                   ${acc?`<span style="font-size:11px;color:var(--muted);">📁 ${acc.name}</span>`:''}
@@ -589,13 +560,10 @@ function renderJournal(){
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
                 <span class="je-amount ${isInc?'green':'red'}">${isInc?'+':'-'}${fmt(e.amount)}</span>
-                <div class="je-actions">
-                  <button class="edit-btn" onclick="editJournalEntry('${e.id}')">編輯</button>
-                  <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteJournalEntry('${e.id}')">刪除</button>
-                </div>
+                <button class="edit-btn" onclick="editJournalEntry('${e.id}')">編輯</button>
+                <button class="edit-btn" style="color:var(--red);border-color:rgba(255,77,109,0.3);" onclick="deleteJournalEntry('${e.id}')">刪除</button>
               </div>
             </div>
-            ${e.note?`<div style="font-size:12px;color:var(--muted);margin-top:5px;padding-left:4px;">📝 ${e.note}</div>`:''}
           </div>`;
         }).join('')}
       </div>`;
@@ -610,9 +578,8 @@ function buildJournalFields(entry){
   const incCats = state.categories.filter(c=>c.type==='income');
   const type = entry?.type||'expense';
   const today = new Date().toISOString().slice(0,10);
-
   return `
-    <div class="radio-row" id="typeRow">
+    <div class="radio-row">
       <button class="radio-btn sel-red ${type==='expense'?'selected':''}" id="rb-expense" onclick="selectType('expense')">支出</button>
       <button class="radio-btn ${type==='income'?'selected':''}" id="rb-income" onclick="selectType('income')">收入</button>
     </div>
@@ -622,7 +589,7 @@ function buildJournalFields(entry){
     </div>
     <div class="form-group">
       <label>金額 (TWD)</label>
-      <input type="number" id="f_amount" value="${entry?.amount||''}" placeholder="0" min="0" autofocus>
+      <input type="number" id="f_amount" value="${entry?.amount||''}" placeholder="0" min="0">
     </div>
     <div class="form-group">
       <label>類別</label>
@@ -649,262 +616,160 @@ function selectType(t){
   document.getElementById('rb-expense').classList.toggle('selected', t==='expense');
   document.getElementById('rb-income').classList.toggle('selected', t==='income');
 }
-
 function openJournalModal(entry){
   _journalType = entry?.type||'expense';
-  currentEditType = entry ? 'journal_edit' : 'journal_new';
+  currentEditType = entry?'journal_edit':'journal_new';
   currentEditIndex = entry?.id||null;
   openModal('新增交易', buildJournalFields(entry), entry?'儲存':'新增');
 }
-
 function editJournalEntry(id){
-  const entry = state.journal.find(e=>e.id===id);
-  if(entry) openJournalModal(entry);
+  const e = state.journal.find(e=>e.id===id);
+  if(e) openJournalModal(e);
 }
-
 function deleteJournalEntry(id){
-  if(!confirm('確定刪除此筆交易？帳戶餘額將自動還原。')) return;
-  const entry = state.journal.find(e=>e.id===id);
-  if(entry){
-    const acc = getAcc(entry.accountId);
-    if(acc){
-      if(entry.type==='expense') acc.value += entry.amount;
-      else acc.value -= entry.amount;
-    }
+  if(!confirm('確定刪除？帳戶餘額將自動還原。')) return;
+  const e = state.journal.find(e=>e.id===id);
+  if(e){
+    const acc = getAcc(e.accountId);
+    if(acc){ if(e.type==='expense') acc.value += e.amount; else acc.value -= e.amount; }
   }
   state.journal = state.journal.filter(e=>e.id!==id);
-  saveState();
-  renderAll();
-  showToast('交易已刪除，帳戶餘額已還原');
+  saveState(); renderAll(); showToast('已刪除，餘額已還原');
 }
-
 function saveJournalEntry(){
   const amount = parseFloat(document.getElementById('f_amount').value)||0;
-  const date = document.getElementById('f_date').value;
+  const date   = document.getElementById('f_date').value;
   const categoryId = document.getElementById('f_cat').value;
-  const accountId = document.getElementById('f_acc').value;
+  const accountId  = document.getElementById('f_acc').value;
+  if(!amount||!date){ alert('請填寫日期和金額'); return; }
 
-  if(!amount || !date){ alert('請填寫日期和金額'); return; }
+  // 判斷類別是否屬於收入，強制對齊 type
+  const cat = getCat(categoryId);
+  const inferredType = cat ? cat.type : _journalType;
 
-  const entry = {
-    id: currentEditIndex || uid(),
-    type: _journalType,
-    date, amount, categoryId, accountId
-  };
-
+  const entry = { id: currentEditIndex||uid(), type: inferredType, date, amount, categoryId, accountId };
   const acc = getAcc(accountId);
   if(acc){
     if(currentEditType==='journal_edit'){
-      // 先還原舊的帳戶餘額
       const old = state.journal.find(e=>e.id===currentEditIndex);
-      if(old){
-        const oldAcc = getAcc(old.accountId);
-        if(oldAcc){
-          if(old.type==='expense') oldAcc.value += old.amount;
-          else oldAcc.value -= old.amount;
-        }
-      }
+      if(old){ const oa=getAcc(old.accountId); if(oa){ if(old.type==='expense') oa.value+=old.amount; else oa.value-=old.amount; } }
     }
-    // 套用新的
-    if(entry.type==='expense') acc.value -= amount;
-    else acc.value += amount;
+    if(entry.type==='expense') acc.value -= amount; else acc.value += amount;
   }
-
   if(currentEditType==='journal_edit'){
     const idx = state.journal.findIndex(e=>e.id===currentEditIndex);
-    if(idx>=0) state.journal[idx] = entry;
-  } else {
-    state.journal.push(entry);
-  }
-
-  saveState();
-  closeModal();
-  renderAll();
+    if(idx>=0) state.journal[idx]=entry;
+  } else { state.journal.push(entry); }
+  saveState(); closeModal(); renderAll();
   showToast(entry.type==='expense'?`-${fmt(amount)} 已記錄`:`+${fmt(amount)} 已記錄`);
 }
 
 // ================================================================
-// TRANSFER MODAL
+// TRANSFER
 // ================================================================
 function openTransferModal(){
-  currentEditType = 'transfer_new';
+  currentEditType='transfer_new';
   const today = new Date().toISOString().slice(0,10);
-  const accOptions = state.accounts.map(a=>`<option value="${a.id}">${a.name} (${fmt(a.value)})</option>`).join('');
-  openModal('帳戶轉帳',
-    `<div style="background:rgba(77,159,255,0.08);border:1px solid rgba(77,159,255,0.25);border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--blue);">
+  const opts = state.accounts.map(a=>`<option value="${a.id}">${a.name} (${fmt(a.value)})</option>`).join('');
+  openModal('帳戶轉帳',`
+    <div style="background:rgba(77,159,255,0.08);border:1px solid rgba(77,159,255,0.25);border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--blue);">
       ⇄ 轉帳不計入收支統計，僅調整帳戶餘額
     </div>
-    <div class="form-group">
-      <label>日期</label>
-      <input type="date" id="f_transfer_date" value="${today}">
-    </div>
-    <div class="form-group">
-      <label>從哪個帳戶轉出</label>
-      <select id="f_from_acc">${accOptions}</select>
-    </div>
+    <div class="form-group"><label>日期</label><input type="date" id="f_transfer_date" value="${today}"></div>
+    <div class="form-group"><label>從哪個帳戶轉出</label><select id="f_from_acc">${opts}</select></div>
     <div style="text-align:center;color:var(--blue);font-size:20px;margin:-4px 0 8px;">↓</div>
-    <div class="form-group">
-      <label>轉入哪個帳戶</label>
-      <select id="f_to_acc">${accOptions}</select>
-    </div>
-    <div class="form-group">
-      <label>金額 (TWD)</label>
-      <input type="number" id="f_transfer_amount" placeholder="0" min="0">
-    </div>
-    <div class="form-group">
-      <label>備註（選填）</label>
-      <input type="text" id="f_transfer_note" placeholder="例：提領現金">
-    </div>`, '確認轉帳');
+    <div class="form-group"><label>轉入哪個帳戶</label><select id="f_to_acc">${opts}</select></div>
+    <div class="form-group"><label>金額 (TWD)</label><input type="number" id="f_transfer_amount" placeholder="0" min="0"></div>
+    <div class="form-group"><label>備註（選填）</label><input type="text" id="f_transfer_note" placeholder="例：提領現金"></div>`,
+  '確認轉帳');
 }
-
 function saveTransferEntry(){
-  const date = document.getElementById('f_transfer_date').value;
+  const date   = document.getElementById('f_transfer_date').value;
   const fromId = document.getElementById('f_from_acc').value;
-  const toId = document.getElementById('f_to_acc').value;
+  const toId   = document.getElementById('f_to_acc').value;
   const amount = parseFloat(document.getElementById('f_transfer_amount').value)||0;
-  const note = document.getElementById('f_transfer_note').value.trim();
-
-  if(!amount || !date){ alert('請填寫日期和金額'); return; }
-  if(fromId === toId){ alert('來源與目標帳戶不能相同'); return; }
-
-  const fromAcc = getAcc(fromId);
-  const toAcc = getAcc(toId);
-
-  if(!fromAcc || !toAcc){ alert('帳戶不存在'); return; }
-  if(fromAcc.value < amount){
-    if(!confirm(`來源帳戶餘額不足（現有 ${fmt(fromAcc.value)}），確定繼續？`)) return;
-  }
-
-  // 建立轉帳記錄
-  const entry = {
-    id: uid(),
-    type: 'transfer',
-    date,
-    amount,
-    fromAccountId: fromId,
-    toAccountId: toId,
-    note: note || ''
-  };
-
-  // 調整帳戶餘額
-  fromAcc.value -= amount;
-  toAcc.value += amount;
-
-  state.journal.push(entry);
-  saveState();
-  closeModal();
-  renderAll();
-  showToast(`⇄ 轉帳 ${fmt(amount)} 完成`);
+  const note   = document.getElementById('f_transfer_note').value.trim();
+  if(!amount||!date){ alert('請填寫日期和金額'); return; }
+  if(fromId===toId){ alert('來源與目標帳戶不能相同'); return; }
+  const fa=getAcc(fromId), ta=getAcc(toId);
+  if(!fa||!ta){ alert('帳戶不存在'); return; }
+  if(fa.value < amount){ if(!confirm(`來源帳戶餘額不足（${fmt(fa.value)}），確定繼續？`)) return; }
+  fa.value -= amount; ta.value += amount;
+  state.journal.push({ id:uid(), type:'transfer', date, amount, fromAccountId:fromId, toAccountId:toId, note });
+  saveState(); closeModal(); renderAll(); showToast(`⇄ 轉帳 ${fmt(amount)} 完成`);
 }
-
 function deleteTransferEntry(id){
-  if(!confirm('確定刪除此轉帳記錄？帳戶餘額將自動還原。')) return;
-  const entry = state.journal.find(e=>e.id===id);
-  if(entry && entry.type==='transfer'){
-    const fromAcc = getAcc(entry.fromAccountId);
-    const toAcc = getAcc(entry.toAccountId);
-    if(fromAcc) fromAcc.value += entry.amount;
-    if(toAcc) toAcc.value -= entry.amount;
+  if(!confirm('確定刪除轉帳？帳戶餘額將自動還原。')) return;
+  const e = state.journal.find(e=>e.id===id);
+  if(e&&e.type==='transfer'){
+    const fa=getAcc(e.fromAccountId), ta=getAcc(e.toAccountId);
+    if(fa) fa.value += e.amount; if(ta) ta.value -= e.amount;
   }
   state.journal = state.journal.filter(e=>e.id!==id);
-  saveState();
-  renderAll();
-  showToast('轉帳已刪除，帳戶餘額已還原');
+  saveState(); renderAll(); showToast('轉帳已刪除，餘額已還原');
 }
 
-
+// ================================================================
+// SUMMARY
+// ================================================================
 function renderSummary(){
   const mk = getCurrentMonthKey();
   const entries = getMonthJournal(mk);
-  const incMap = sumByCategory(entries, 'income');
-  const expMap = sumByCategory(entries, 'expense');
-
+  const incMap = sumByCategory(entries,'income');
+  const expMap = sumByCategory(entries,'expense');
   const totalInc = Object.values(incMap).reduce((s,v)=>s+v,0);
   const totalExp = Object.values(expMap).reduce((s,v)=>s+v,0);
   document.getElementById('realIncTotal').textContent = fmt(totalInc);
   document.getElementById('realExpTotal').textContent = fmt(totalExp);
 
-  // Income list
   const incCats = state.categories.filter(c=>c.type==='income');
   const incEl = document.getElementById('realIncList');
   const incRows = incCats.filter(c=>incMap[c.id]>0);
   incEl.innerHTML = incRows.length===0
     ? '<div style="color:var(--muted);font-size:12px;">本月尚無收入紀錄</div>'
     : incRows.map(c=>{
-        const v = incMap[c.id]||0;
-        const pct = totalInc>0?((v/totalInc)*100).toFixed(1):0;
-        return `<div class="expense-item">
-          <div class="expense-row">
-            <span style="display:flex;align-items:center;gap:6px;font-size:13px;">
-              <span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}
-            </span>
-            <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
-              <span style="color:var(--muted);">${pct}%</span>
-              <span class="green">${fmt(v)}</span>
-            </span>
-          </div>
-          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div>
-        </div>`;
+        const v=incMap[c.id]||0, pct=totalInc>0?((v/totalInc)*100).toFixed(1):0;
+        return `<div class="expense-item"><div class="expense-row">
+          <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
+          <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;"><span style="color:var(--muted);">${pct}%</span><span class="green">${fmt(v)}</span></span>
+        </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div></div>`;
       }).join('');
 
-  // Expense list
   const expCats = state.categories.filter(c=>c.type==='expense');
   const expEl = document.getElementById('realExpList');
   const expRows = expCats.filter(c=>expMap[c.id]>0);
   expEl.innerHTML = expRows.length===0
     ? '<div style="color:var(--muted);font-size:12px;">本月尚無支出紀錄</div>'
     : expRows.map(c=>{
-        const v = expMap[c.id]||0;
-        const pct = totalExp>0?((v/totalExp)*100).toFixed(1):0;
-        return `<div class="expense-item">
-          <div class="expense-row">
-            <span style="display:flex;align-items:center;gap:6px;font-size:13px;">
-              <span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}
-            </span>
-            <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
-              <span style="color:var(--muted);">${pct}%</span>
-              <span class="red">${fmt(v)}</span>
-            </span>
-          </div>
-          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div>
-        </div>`;
+        const v=expMap[c.id]||0, pct=totalExp>0?((v/totalExp)*100).toFixed(1):0;
+        return `<div class="expense-item"><div class="expense-row">
+          <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
+          <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;"><span style="color:var(--muted);">${pct}%</span><span class="red">${fmt(v)}</span></span>
+        </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div></div>`;
       }).join('');
 
-  // Budget comparison
   const budgetEl = document.getElementById('budgetList');
   const budgetCats = expCats.filter(c=>c.budget>0);
-  if(budgetCats.length===0){
-    budgetEl.innerHTML = '<div style="color:var(--muted);font-size:12px;">請至「資產管理」設定各類別預算</div>';
-  } else {
-    budgetEl.innerHTML = budgetCats.map(c=>{
-      const spent = expMap[c.id]||0;
-      const pct = Math.min((spent/c.budget)*100, 100).toFixed(0);
-      const over = spent > c.budget;
-      return `<div class="expense-item">
-        <div class="expense-row">
-          <span style="display:flex;align-items:center;gap:6px;font-size:13px;">
-            <span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}
-          </span>
+  budgetEl.innerHTML = budgetCats.length===0
+    ? '<div style="color:var(--muted);font-size:12px;">請至「資產管理」設定各類別預算</div>'
+    : budgetCats.map(c=>{
+        const spent=expMap[c.id]||0, pct=Math.min((spent/c.budget)*100,100).toFixed(0), over=spent>c.budget;
+        return `<div class="expense-item"><div class="expense-row">
+          <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
           <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
-            <span class="${over?'red':'muted'}" style="color:${over?'var(--red)':'var(--muted)'};">${fmt(spent)}</span>
+            <span style="color:${over?'var(--red)':'var(--muted)'};">${fmt(spent)}</span>
             <span style="color:var(--muted);">/ ${fmt(c.budget)}</span>
             ${over?`<span style="color:var(--red);font-size:10px;">超支</span>`:''}
           </span>
-        </div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:${pct}%;background:${over?'var(--red)':c.color};"></div>
-        </div>
-      </div>`;
-    }).join('');
-  }
+        </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${over?'var(--red)':c.color};"></div></div></div>`;
+      }).join('');
 }
 
 // ================================================================
-// ASSETS TAB
+// ASSETS
 // ================================================================
 function renderAccounts(){
-  const el = document.getElementById('accountsList');
-  el.innerHTML = state.accounts.map((a,i)=>`
+  document.getElementById('accountsList').innerHTML = state.accounts.map((a,i)=>`
     <div class="list-item">
       <div><div class="item-name">${a.name}</div><div class="item-sub">${a.sub}</div></div>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -914,15 +779,11 @@ function renderAccounts(){
     </div>`).join('');
 }
 
-let ethPriceTWD = null, ethLastUpdated = null;
-
+let ethPriceTWD=null, ethLastUpdated=null;
 function renderInvestments(){
-  const el = document.getElementById('investList');
-  el.innerHTML = state.investments.map((inv,i)=>{
+  document.getElementById('investList').innerHTML = state.investments.map((inv,i)=>{
     if(inv.type==='etf'){
-      const gain = inv.shares*(inv.currentPrice-inv.costPrice);
-      const gainPct = ((inv.currentPrice-inv.costPrice)/inv.costPrice*100).toFixed(2);
-      const up = gain>=0;
+      const gain=inv.shares*(inv.currentPrice-inv.costPrice), gainPct=((inv.currentPrice-inv.costPrice)/inv.costPrice*100).toFixed(2), up=gain>=0;
       return `<div class="invest-card">
         <div class="invest-top">
           <div><div class="invest-name">${inv.name}</div><div class="invest-ticker">${inv.ticker}</div></div>
@@ -941,26 +802,21 @@ function renderInvestments(){
         </div>
       </div>`;
     } else {
-      const gain = inv.currentTWD - inv.costTWD;
-      const gainPct = ((gain/inv.costTWD)*100).toFixed(2);
-      const up = gain>=0;
-      const livePriceStr = inv.livePrice
-        ? `<span style="color:var(--green);font-size:10px;">● 即時</span> $${inv.livePrice.toLocaleString()} TWD/ETH`
-        : `${inv.avgPrice.toLocaleString()} TWD（手動）`;
-      const updStr = ethLastUpdated ? ethLastUpdated.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : '—';
+      const gain=inv.currentTWD-inv.costTWD, gainPct=((gain/inv.costTWD)*100).toFixed(2), up=gain>=0;
+      const liveStr=inv.livePrice?`<span style="color:var(--green);font-size:10px;">● 即時</span> $${inv.livePrice.toLocaleString()} TWD/ETH`:`${inv.avgPrice.toLocaleString()} TWD（手動）`;
+      const updStr=ethLastUpdated?ethLastUpdated.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}):'—';
       return `<div class="invest-card">
         <div class="invest-top">
           <div><div class="invest-name">${inv.name}</div><div class="invest-ticker">${inv.ticker}</div></div>
           <div style="display:flex;gap:6px;align-items:center;">
             <span class="invest-badge ${up?'badge-up':'badge-down'}">${up?'+':''}${gainPct}%</span>
-            <button class="edit-btn" onclick="fetchETHPrice()" style="border-color:rgba(0,229,160,0.4);color:var(--green);">↻</button>
             <button class="edit-btn" onclick="editInvestItem(${i})">編輯</button>
           </div>
         </div>
         <div class="invest-grid">
           <div><div class="invest-stat-l">持倉</div><div class="invest-stat-v">${inv.amount} ETH</div></div>
           <div><div class="invest-stat-l">現值</div><div class="invest-stat-v green">${fmt(inv.currentTWD)}</div></div>
-          <div style="grid-column:1/-1"><div class="invest-stat-l">即時單價</div><div class="invest-stat-v" style="font-size:12px;">${livePriceStr}</div></div>
+          <div style="grid-column:1/-1"><div class="invest-stat-l">即時單價</div><div class="invest-stat-v" style="font-size:12px;">${liveStr}</div></div>
           <div><div class="invest-stat-l">成交均價</div><div class="invest-stat-v">${inv.avgPrice.toLocaleString()} TWD</div></div>
           <div><div class="invest-stat-l">預估損益</div><div class="invest-stat-v ${up?'green':'red'}">${up?'+':''}${fmt(gain)}</div></div>
         </div>
@@ -971,15 +827,11 @@ function renderInvestments(){
 }
 
 function renderBudgetSettings(){
-  const el = document.getElementById('budgetSettingList');
-  el.innerHTML = state.categories.map((c,i)=>`
+  document.getElementById('budgetSettingList').innerHTML = state.categories.map((c,i)=>`
     <div class="list-item">
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="width:10px;height:10px;border-radius:50%;background:${c.color};display:inline-block;flex-shrink:0;"></span>
-        <div>
-          <div class="item-name">${c.name}</div>
-          <div class="item-sub">${c.type==='expense'?'支出':'收入'} 類別${c.budget>0?' · 預算 '+fmt(c.budget):''}</div>
-        </div>
+        <div><div class="item-name">${c.name}</div><div class="item-sub">${c.type==='expense'?'支出':'收入'} 類別${c.budget>0?' · 預算 '+fmt(c.budget):''}</div></div>
       </div>
       <div style="display:flex;gap:6px;">
         <button class="edit-btn" onclick="editCategory(${i})">編輯</button>
@@ -989,35 +841,27 @@ function renderBudgetSettings(){
 }
 
 // ================================================================
-// HISTORY TAB
+// HISTORY
 // ================================================================
 function renderHistory(){
   const el = document.getElementById('historyList');
-  if(!state.history||state.history.length===0){
-    el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:10px;">尚無存檔紀錄</div>';
-    return;
-  }
+  if(!state.history||state.history.length===0){ el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:10px;">尚無存檔紀錄</div>'; return; }
   el.innerHTML = state.history.map((h,idx)=>{
-    const expDetail = (h.expBreakdown||[]).filter(e=>e.value>0).map(e=>
-      `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
-        <span style="display:flex;align-items:center;gap:6px;font-size:12px;">
-          <span style="width:7px;height:7px;border-radius:50%;background:${e.color||'#aaa'};display:inline-block;"></span>${e.name}
-        </span>
+    const expD=(h.expBreakdown||[]).filter(e=>e.value>0).map(e=>`
+      <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+        <span style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:7px;height:7px;border-radius:50%;background:${e.color||'#aaa'};display:inline-block;"></span>${e.name}</span>
         <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--red);">$${e.value.toLocaleString()}</span>
       </div>`).join('');
-    const incDetail = (h.incBreakdown||[]).filter(i=>i.value>0).map(i=>
-      `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+    const incD=(h.incBreakdown||[]).filter(i=>i.value>0).map(i=>`
+      <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
         <span style="font-size:12px;">${i.name}</span>
         <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--green);">$${i.value.toLocaleString()}</span>
       </div>`).join('');
     return `<div class="hist-item">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div>
-          <div class="item-name" style="cursor:pointer;" onclick="document.getElementById('hd-${idx}').style.display=document.getElementById('hd-${idx}').style.display==='none'?'block':'none'">
-            ${h.month} <span style="font-size:11px;color:var(--muted);">▾</span>
-          </div>
-          <div class="item-sub">收 $${h.income.toLocaleString()} ／ 支 $${h.expense.toLocaleString()}${h.netWorth?` ／ 淨資產 $${h.netWorth.toLocaleString()}`:''}
-          </div>
+          <div class="item-name" style="cursor:pointer;" onclick="toggleHist(${idx})">${h.month} <span style="font-size:11px;color:var(--muted);">▾</span></div>
+          <div class="item-sub">收 $${h.income.toLocaleString()} ／ 支 $${h.expense.toLocaleString()}${h.netWorth?` ／ 淨資產 $${h.netWorth.toLocaleString()}`:''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <div class="item-val ${h.net>=0?'green':'red'}">${h.net>=0?'+':''}$${h.net.toLocaleString()}</div>
@@ -1025,41 +869,38 @@ function renderHistory(){
         </div>
       </div>
       <div id="hd-${idx}" class="hist-detail">
-        ${incDetail?`<div style="font-size:11px;color:var(--green);margin-bottom:6px;">收入明細</div>${incDetail}`:''}
-        ${expDetail?`<div style="font-size:11px;color:var(--red);margin-top:10px;margin-bottom:6px;">支出明細</div>${expDetail}`:''}
-        ${!incDetail&&!expDetail?'<div style="font-size:12px;color:var(--muted);">無明細資料</div>':''}
+        ${incD?`<div style="font-size:11px;color:var(--green);margin-bottom:6px;">收入明細</div>${incD}`:''}
+        ${expD?`<div style="font-size:11px;color:var(--red);margin-top:10px;margin-bottom:6px;">支出明細</div>${expD}`:''}
+        ${!incD&&!expD?'<div style="font-size:12px;color:var(--muted);">無明細資料</div>':''}
       </div>
     </div>`;
   }).join('');
 }
-
+function toggleHist(idx){
+  const el=document.getElementById('hd-'+idx);
+  if(el) el.style.display=el.style.display==='block'?'none':'block';
+}
 function deleteHistory(idx){
-  if(!confirm('確定刪除這筆歷史紀錄？')) return;
-  state.history.splice(idx,1);
-  saveState(); renderHistory();
+  if(!confirm('確定刪除？')) return;
+  state.history.splice(idx,1); saveState(); renderHistory();
 }
 
 // ================================================================
-// ARCHIVE MONTH
+// ARCHIVE
 // ================================================================
 function archiveMonth(){
-  const mk = getCurrentMonthKey();
-  const entries = getMonthJournal(mk);
-  const totalInc = entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
-  const totalExp = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
-  const net = totalInc - totalExp;
-  const acctTotal = state.accounts.reduce((s,a)=>s+a.value,0);
-  const investTWD = state.investments.reduce((s,i)=>{
-    if(i.type==='etf') return s+i.shares*i.currentPrice;
-    return s+i.currentTWD;
-  },0);
-  const netWorth = acctTotal + investTWD;
-
-  const now = new Date();
-  const defaultYear = now.getDate()<=5?(now.getMonth()===0?now.getFullYear()-1:now.getFullYear()):now.getFullYear();
-  const defaultMonth = now.getDate()<=5?(now.getMonth()===0?12:now.getMonth()):now.getMonth()+1;
-
-  const fields = `
+  const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
+  const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExp=entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const net=totalInc-totalExp;
+  const acctTotal=state.accounts.reduce((s,a)=>s+a.value,0);
+  const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
+  const netWorth=acctTotal+investTWD;
+  const now=new Date();
+  const dy=now.getDate()<=5, defaultYear=dy?(now.getMonth()===0?now.getFullYear()-1:now.getFullYear()):now.getFullYear();
+  const defaultMonth=dy?(now.getMonth()===0?12:now.getMonth()):now.getMonth()+1;
+  currentEditType='archive';
+  openModal('📦 月底結算',`
     <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">本月摘要</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -1070,80 +911,51 @@ function archiveMonth(){
         <div style="grid-column:1/-1"><div style="font-size:11px;color:var(--muted);">當前淨資產</div><div style="font-family:'Space Mono',monospace;font-size:15px;">$${netWorth.toLocaleString()}</div></div>
       </div>
     </div>
-    <div class="form-group">
-      <label>結算月份（格式：2026/03）</label>
-      <input type="text" id="f_archiveMonth" value="${defaultYear}/${String(defaultMonth).padStart(2,'0')}">
-    </div>
-    <div style="font-size:11px;color:var(--muted);">⚠️ 結算後，該月份交易紀錄會保留但封存，不影響帳戶餘額。</div>`;
-
-  currentEditType = 'archive';
-  openModal('📦 月底結算', fields, '確認結算');
+    <div class="form-group"><label>結算月份（格式：2026/03）</label><input type="text" id="f_archiveMonth" value="${defaultYear}/${String(defaultMonth).padStart(2,'0')}"></div>
+    <div style="font-size:11px;color:var(--muted);">⚠️ 結算後交易紀錄保留，不影響帳戶餘額。</div>`,
+  '確認結算');
 }
-
 function confirmArchive(){
-  const rawMonth = (document.getElementById('f_archiveMonth')?.value||'').trim();
-  if(!rawMonth.match(/^\d{4}\/\d{2}$/)){alert('格式錯誤，請輸入如 2026/03');return;}
-  const [y,m] = rawMonth.split('/');
-  const monthKey = `${y} 年 ${parseInt(m)} 月`;
-  const mk = `${y}-${m}`;
-  const entries = getMonthJournal(mk);
-
-  const totalInc = entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
-  const totalExp = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
-  const acctTotal = state.accounts.reduce((s,a)=>s+a.value,0);
-  const investTWD = state.investments.reduce((s,i)=>{
-    if(i.type==='etf') return s+i.shares*i.currentPrice;
-    return s+i.currentTWD;
-  },0);
-
-  // 按類別彙整
-  const incMap = sumByCategory(entries,'income');
-  const expMap = sumByCategory(entries,'expense');
-
+  const raw=(document.getElementById('f_archiveMonth')?.value||'').trim();
+  if(!raw.match(/^\d{4}\/\d{2}$/)){ alert('格式錯誤，請輸入如 2026/03'); return; }
+  const [y,m]=raw.split('/'), monthKey=`${y} 年 ${parseInt(m)} 月`, mk=`${y}-${m}`;
+  const entries=getMonthJournal(mk);
+  const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const totalExp=entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const acctTotal=state.accounts.reduce((s,a)=>s+a.value,0);
+  const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
+  const incMap=sumByCategory(entries,'income'), expMap=sumByCategory(entries,'expense');
   if(!state.history) state.history=[];
   state.history.unshift({
-    month: monthKey,
-    income: totalInc,
-    expense: totalExp,
-    net: totalInc - totalExp,
-    netWorth: acctTotal + investTWD,
-    incBreakdown: state.categories.filter(c=>c.type==='income'&&incMap[c.id]>0).map(c=>({name:c.name,value:incMap[c.id]||0})),
-    expBreakdown: state.categories.filter(c=>c.type==='expense'&&expMap[c.id]>0).map(c=>({name:c.name,value:expMap[c.id]||0,color:c.color})),
+    month:monthKey, income:totalInc, expense:totalExp, net:totalInc-totalExp, netWorth:acctTotal+investTWD,
+    incBreakdown:state.categories.filter(c=>c.type==='income'&&incMap[c.id]>0).map(c=>({name:c.name,value:incMap[c.id]||0})),
+    expBreakdown:state.categories.filter(c=>c.type==='expense'&&expMap[c.id]>0).map(c=>({name:c.name,value:expMap[c.id]||0,color:c.color})),
   });
-
-  saveState();
-  closeModal();
-  renderAll();
-  showToast(`${monthKey} 結算完成 ✓`);
+  saveState(); closeModal(); renderAll(); showToast(`${monthKey} 結算完成 ✓`);
 }
 
 // ================================================================
 // MODAL ENGINE
 // ================================================================
-function openModal(title, fields, confirmLabel){
-  document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalFields').innerHTML = fields;
-  document.getElementById('modalConfirmBtn').textContent = confirmLabel||'儲存';
+function openModal(title,fields,confirmLabel){
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalFields').innerHTML=fields;
+  document.getElementById('modalConfirmBtn').textContent=confirmLabel||'儲存';
   document.getElementById('modalOverlay').classList.add('open');
 }
-function closeModal(){
-  document.getElementById('modalOverlay').classList.remove('open');
-  currentEditType = null; currentEditIndex = null;
-}
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); currentEditType=null; currentEditIndex=null; }
 function val(id){ return document.getElementById(id)?.value||''; }
 function numval(id){ return parseFloat(val(id))||0; }
 function field(label,id,value,type='text'){
-  return `<div class="form-group"><label>${label}</label><input type="${type}" id="${id}" value="${escHtml(String(value))}"></div>`;
+  const safe=String(value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return `<div class="form-group"><label>${label}</label><input type="${type}" id="${id}" value="${safe}"></div>`;
 }
-function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
 function saveModal(){
   if(currentEditType==='transfer_new'){ saveTransferEntry(); return; }
   if(currentEditType==='archive'){ confirmArchive(); return; }
   if(currentEditType==='journal_new'||currentEditType==='journal_edit'){ saveJournalEntry(); return; }
   if(currentEditType==='account_edit'){
-    const a = state.accounts[currentEditIndex];
-    a.name=val('f_name'); a.sub=val('f_sub'); a.value=numval('f_value');
+    const a=state.accounts[currentEditIndex]; a.name=val('f_name'); a.sub=val('f_sub'); a.value=numval('f_value');
     saveState(); closeModal(); renderAccounts(); renderHero(); return;
   }
   if(currentEditType==='account_new'){
@@ -1151,8 +963,7 @@ function saveModal(){
     saveState(); closeModal(); renderAccounts(); renderHero(); return;
   }
   if(currentEditType==='cat_edit'){
-    const c = state.categories[currentEditIndex];
-    c.name=val('f_name'); c.budget=numval('f_budget');
+    const c=state.categories[currentEditIndex]; c.name=val('f_name'); c.budget=numval('f_budget');
     saveState(); closeModal(); renderBudgetSettings(); renderSummary(); return;
   }
   if(currentEditType==='cat_new'){
@@ -1161,14 +972,12 @@ function saveModal(){
   }
   if(currentEditType==='invest_etf'){
     const inv=state.investments[currentEditIndex];
-    inv.name=val('f_name');inv.ticker=val('f_ticker');inv.shares=numval('f_shares');
-    inv.costPrice=numval('f_cost');inv.currentPrice=numval('f_price');inv.breakeven=numval('f_breakeven');
+    inv.name=val('f_name');inv.ticker=val('f_ticker');inv.shares=numval('f_shares');inv.costPrice=numval('f_cost');inv.currentPrice=numval('f_price');inv.breakeven=numval('f_breakeven');
     saveState(); closeModal(); renderInvestments(); renderHero(); return;
   }
   if(currentEditType==='invest_crypto'){
     const inv=state.investments[currentEditIndex];
-    inv.name=val('f_name');inv.ticker=val('f_ticker');inv.amount=parseFloat(val('f_amount'))||0;
-    inv.costTWD=numval('f_cost');inv.currentTWD=numval('f_current');inv.avgPrice=numval('f_avg');
+    inv.name=val('f_name');inv.ticker=val('f_ticker');inv.amount=parseFloat(val('f_amount'))||0;inv.costTWD=numval('f_cost');inv.currentTWD=numval('f_current');inv.avgPrice=numval('f_avg');
     saveState(); closeModal(); renderInvestments(); renderHero(); return;
   }
   if(currentEditType==='invest_new_etf'){
@@ -1182,149 +991,78 @@ function saveModal(){
 }
 
 // ================================================================
-// ACCOUNT MODALS
+// ACCOUNT / CATEGORY / INVEST MODALS
 // ================================================================
-function openAccountModal(){
-  currentEditType='account_new';
-  openModal('新增帳戶',
-    field('帳戶名稱','f_name','')+field('說明','f_sub','TWD')+field('金額 (TWD)','f_value',0,'number'));
-}
+function openAccountModal(){ currentEditType='account_new'; openModal('新增帳戶',field('帳戶名稱','f_name','')+field('說明','f_sub','TWD')+field('金額 (TWD)','f_value',0,'number')); }
 function editAccount(i){
-  currentEditType='account_edit'; currentEditIndex=i;
-  const a=state.accounts[i];
-  openModal('編輯帳戶',
-    field('帳戶名稱','f_name',a.name)+field('說明','f_sub',a.sub)+field('金額 (TWD)','f_value',a.value,'number')+
-    `<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteAccount(${i})">刪除此帳戶</button>`);
+  currentEditType='account_edit'; currentEditIndex=i; const a=state.accounts[i];
+  openModal('編輯帳戶',field('帳戶名稱','f_name',a.name)+field('說明','f_sub',a.sub)+field('金額 (TWD)','f_value',a.value,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteAccount(${i})">刪除此帳戶</button>`);
 }
-function deleteAccount(i){
-  if(!confirm('確定刪除？')) return;
-  state.accounts.splice(i,1);
-  saveState(); closeModal(); renderAccounts(); renderHero();
-}
+function deleteAccount(i){ if(!confirm('確定刪除？')) return; state.accounts.splice(i,1); saveState(); closeModal(); renderAccounts(); renderHero(); }
 
-// ================================================================
-// CATEGORY MODALS
-// ================================================================
 function openBudgetCatModal(){
   currentEditType='cat_new';
-  openModal('新增類別',
-    field('類別名稱','f_name','')+
-    `<div class="form-group"><label>類型</label><select id="f_cattype"><option value="expense">支出</option><option value="income">收入</option></select></div>`+
-    field('預算金額 (TWD，收入類別填0)','f_budget',0,'number'));
+  openModal('新增類別',field('類別名稱','f_name','')+`<div class="form-group"><label>類型</label><select id="f_cattype"><option value="expense">支出</option><option value="income">收入</option></select></div>`+field('預算金額 (TWD)','f_budget',0,'number'));
 }
 function editCategory(i){
-  currentEditType='cat_edit'; currentEditIndex=i;
-  const c=state.categories[i];
-  openModal('編輯類別',
-    field('類別名稱','f_name',c.name)+field('預算金額 (TWD)','f_budget',c.budget,'number')+
-    `<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteCategory(${i})">刪除此類別</button>`);
+  currentEditType='cat_edit'; currentEditIndex=i; const c=state.categories[i];
+  openModal('編輯類別',field('類別名稱','f_name',c.name)+field('預算金額 (TWD)','f_budget',c.budget,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteCategory(${i})">刪除此類別</button>`);
 }
-function deleteCategory(i){
-  if(!confirm('確定刪除此類別？相關交易紀錄不受影響。')) return;
-  state.categories.splice(i,1);
-  saveState(); closeModal(); renderBudgetSettings(); renderSummary();
-}
+function deleteCategory(i){ if(!confirm('確定刪除？')) return; state.categories.splice(i,1); saveState(); closeModal(); renderBudgetSettings(); renderSummary(); }
 
-// ================================================================
-// INVESTMENT MODALS
-// ================================================================
 function addInvestItem(){
-  const isEtf = confirm('點「確定」新增 ETF，點「取消」新增虛擬貨幣');
-  if(isEtf){
-    currentEditType='invest_new_etf';
-    openModal('新增 ETF',
-      field('名稱','f_name','')+field('代碼','f_ticker','')+field('持股數量','f_shares',0,'number')+
-      field('成本均價','f_cost',0,'number')+field('現價','f_price',0,'number')+field('損益兩平價','f_breakeven',0,'number'));
-  } else {
-    currentEditType='invest_new_crypto';
-    openModal('新增虛擬貨幣',
-      field('名稱','f_name','')+field('代碼','f_ticker','')+field('持倉數量','f_amount',0)+
-      field('成本 (TWD)','f_cost',0,'number')+field('現值 (TWD)','f_current',0,'number')+field('成交均價 (TWD)','f_avg',0,'number'));
-  }
+  const isEtf=confirm('點「確定」新增 ETF，點「取消」新增虛擬貨幣');
+  if(isEtf){ currentEditType='invest_new_etf'; openModal('新增 ETF',field('名稱','f_name','')+field('代碼','f_ticker','')+field('持股數量','f_shares',0,'number')+field('成本均價','f_cost',0,'number')+field('現價','f_price',0,'number')+field('損益兩平價','f_breakeven',0,'number')); }
+  else { currentEditType='invest_new_crypto'; openModal('新增虛擬貨幣',field('名稱','f_name','')+field('代碼','f_ticker','')+field('持倉數量','f_amount',0)+field('成本 (TWD)','f_cost',0,'number')+field('現值 (TWD)','f_current',0,'number')+field('成交均價 (TWD)','f_avg',0,'number')); }
 }
 function editInvestItem(i){
   const inv=state.investments[i];
-  if(inv.type==='etf'){
-    currentEditType='invest_etf'; currentEditIndex=i;
-    openModal('編輯 ETF',
-      field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持股數量','f_shares',inv.shares,'number')+
-      field('成本均價','f_cost',inv.costPrice,'number')+field('現價','f_price',inv.currentPrice,'number')+field('損益兩平價','f_breakeven',inv.breakeven,'number')+
-      `<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`);
-  } else {
-    currentEditType='invest_crypto'; currentEditIndex=i;
-    openModal('編輯虛擬貨幣',
-      field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持倉數量','f_amount',inv.amount)+
-      field('成本 (TWD)','f_cost',inv.costTWD,'number')+field('現值 (TWD)','f_current',inv.currentTWD,'number')+field('成交均價 (TWD)','f_avg',inv.avgPrice,'number')+
-      `<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`);
-  }
+  if(inv.type==='etf'){ currentEditType='invest_etf'; currentEditIndex=i; openModal('編輯 ETF',field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持股數量','f_shares',inv.shares,'number')+field('成本均價','f_cost',inv.costPrice,'number')+field('現價','f_price',inv.currentPrice,'number')+field('損益兩平價','f_breakeven',inv.breakeven,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`); }
+  else { currentEditType='invest_crypto'; currentEditIndex=i; openModal('編輯虛擬貨幣',field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持倉數量','f_amount',inv.amount)+field('成本 (TWD)','f_cost',inv.costTWD,'number')+field('現值 (TWD)','f_current',inv.currentTWD,'number')+field('成交均價 (TWD)','f_avg',inv.avgPrice,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`); }
 }
-function deleteInvest(i){
-  if(!confirm('確定刪除？')) return;
-  state.investments.splice(i,1);
-  saveState(); closeModal(); renderInvestments(); renderHero();
-}
+function deleteInvest(i){ if(!confirm('確定刪除？')) return; state.investments.splice(i,1); saveState(); closeModal(); renderInvestments(); renderHero(); }
 
 // ================================================================
-// ETH LIVE PRICE
+// ETH
 // ================================================================
 async function fetchETHPrice(){
-  const btn = document.getElementById('ethRefreshBtn');
+  const btn=document.getElementById('ethRefreshBtn');
   if(btn){ btn.textContent='⟳ 更新中'; btn.disabled=true; }
   try{
-    const res = await fetch('https://api.bitopro.com/v3/tickers/eth_twd');
-    const data = await res.json();
-    ethPriceTWD = Math.round(parseFloat(data.data.lastPrice));
-    ethLastUpdated = new Date();
-    state.investments.forEach(inv=>{
-      if(inv.type==='crypto'&&inv.ticker==='ETH'){
-        inv.currentTWD = Math.round(inv.amount * ethPriceTWD);
-        inv.livePrice = ethPriceTWD;
-      }
-    });
-    renderInvestments(); renderHero();
-    showToast(`ETH ${ethPriceTWD.toLocaleString()} TWD ↻`);
-  }catch(e){
-    console.warn('ETH 價格抓取失敗',e);
-    showToast('ETH 價格抓取失敗');
-  } finally {
-    if(btn){ btn.textContent='↻ ETH'; btn.disabled=false; }
-  }
+    const res=await fetch('https://api.bitopro.com/v3/tickers/eth_twd');
+    const data=await res.json();
+    ethPriceTWD=Math.round(parseFloat(data.data.lastPrice)); ethLastUpdated=new Date();
+    state.investments.forEach(inv=>{ if(inv.type==='crypto'&&inv.ticker==='ETH'){ inv.currentTWD=Math.round(inv.amount*ethPriceTWD); inv.livePrice=ethPriceTWD; } });
+    renderInvestments(); renderHero(); showToast(`ETH ${ethPriceTWD.toLocaleString()} TWD`);
+  }catch(e){ console.warn('ETH 抓取失敗',e); showToast('ETH 價格抓取失敗'); }
+  finally{ if(btn){ btn.textContent='↻ ETH'; btn.disabled=false; } }
 }
 
 // ================================================================
 // EXPORT / IMPORT
 // ================================================================
 function exportData(){
-  const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `finance_backup_${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`finance_backup_${new Date().toISOString().slice(0,10)}.json`; a.click();
 }
 function importData(){
-  const input = document.createElement('input');
-  input.type='file'; input.accept='.json';
-  input.onchange = e=>{
-    const file = e.target.files[0]; if(!file) return;
-    const reader = new FileReader();
-    reader.onload = ev=>{
+  const input=document.createElement('input'); input.type='file'; input.accept='.json';
+  input.onchange=e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
       try{
-        const p = JSON.parse(ev.target.result);
-        // v2 format
+        const p=JSON.parse(ev.target.result);
         if(p.categories){
-          if(p.accounts) state.accounts=p.accounts;
-          if(p.investments) state.investments=p.investments;
-          if(p.categories) state.categories=p.categories;
-          if(p.journal) state.journal=p.journal;
+          if(p.accounts) state.accounts=p.accounts; if(p.investments) state.investments=p.investments;
+          if(p.categories) state.categories=p.categories; if(p.journal) state.journal=p.journal;
           if(p.history) state.history=p.history;
           saveState(); renderAll(); showToast('匯入成功 ✓');
         } else {
-          // v1 legacy format — migrate accounts & investments only
-          if(p.accounts) state.accounts = p.accounts.map(a=>({...a, id: a.id||uid()}));
-          if(p.investments) state.investments = p.investments;
-          if(p.history) state.history = p.history;
-          saveState(); renderAll();
-          showToast('舊版資料已匯入（帳戶＋投資）✓');
+          if(p.accounts) state.accounts=p.accounts.map(a=>({...a,id:a.id||uid()}));
+          if(p.investments) state.investments=p.investments; if(p.history) state.history=p.history;
+          saveState(); renderAll(); showToast('舊版資料已匯入 ✓');
         }
       }catch(e){ alert('JSON 格式錯誤'); }
     };
@@ -1333,29 +1071,14 @@ function importData(){
   input.click();
 }
 
-// ================================================================
-// MISC
-// ================================================================
 function randomColor(){
-  const c=['#ff6b6b','#f5c842','#26de81','#45aaf2','#fd79a8','#a29bfe','#74b9ff','#ff9f43','#00cec9','#00e5a0'];
-  return c[Math.floor(Math.random()*c.length)];
+  return ['#ff6b6b','#f5c842','#26de81','#45aaf2','#fd79a8','#a29bfe','#74b9ff','#ff9f43','#00cec9','#00e5a0'][Math.floor(Math.random()*10)];
 }
 
-document.getElementById('modalOverlay').addEventListener('click',function(e){
-  if(e.target===this) closeModal();
-});
+document.getElementById('modalOverlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
 
-// Set default month filter to current month
-const _now = new Date();
-document.getElementById('currentDate').textContent =
-  `${_now.getFullYear()} 年 ${_now.getMonth()+1} 月 ${_now.getDate()} 日`;
-document.getElementById('filterMonth').value =
-  `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
-
-// 初始化：Firebase onAuthStateChanged 會負責載入資料並 renderAll
-// 若尚未登入，loginScreen 會顯示
-loadState(); // 先從 localStorage 載入預設值
+// localStorage 預載（Firebase 登入後會覆蓋）
+loadState();
 </script>
-</div>
 </body>
 </html>
