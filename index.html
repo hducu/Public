@@ -360,6 +360,38 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
         <div id="investList"></div>
       </div>
     </div>
+    <!-- 投資組合總額 -->
+    <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,#161a24 0%,#1a2035 100%);border-color:rgba(0,229,160,0.25);">
+      <div class="section-header" style="margin-bottom:14px;">
+        <div class="card-title" style="color:var(--green);">📈 投資組合總覽</div>
+        <div id="investSummaryUpdated" style="font-size:10px;color:var(--muted);"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;" id="investSummaryGrid">
+        <div style="text-align:center;padding:12px;background:var(--surface2);border-radius:12px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">ETF 市值</div>
+          <div id="sumEtf" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--green);">$0</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:var(--surface2);border-radius:12px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">加密貨幣</div>
+          <div id="sumCrypto" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--yellow);">$0</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:var(--surface2);border-radius:12px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">投資總額</div>
+          <div id="sumTotal" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--accent);">$0</div>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--muted);">總成本</span>
+          <span id="sumCost" style="font-family:'Space Mono',monospace;font-size:13px;">$0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;color:var(--muted);">未實現損益</span>
+          <span id="sumGain" style="font-family:'Space Mono',monospace;font-size:15px;font-weight:700;">$0</span>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="section-header">
         <div class="card-title">月度預算設定</div>
@@ -464,7 +496,7 @@ function renderAll(){
   const mfEl=document.getElementById('filterMonth');
   if(dateEl) dateEl.textContent=`${now.getFullYear()} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
   if(mfEl&&!mfEl.value) mfEl.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderBudgetSettings(); renderHistory();
+  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderBudgetSettings(); renderHistory();
 }
 
 function renderHero(){
@@ -805,6 +837,33 @@ function renderInvestments(){
   }).join('')+`<button class="add-btn" onclick="addInvestItem()">＋ 新增投資項目</button>`;
 }
 
+function renderInvestSummary(){
+  const etfTotal   = state.investments.filter(i=>i.type==='etf').reduce((s,i)=>s+i.shares*i.currentPrice,0);
+  const cryptoTotal= state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+i.currentTWD,0);
+  const total      = etfTotal+cryptoTotal;
+  const etfCost    = state.investments.filter(i=>i.type==='etf').reduce((s,i)=>s+i.shares*i.costPrice,0);
+  const cryptoCost = state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+i.costTWD,0);
+  const totalCost  = etfCost+cryptoCost;
+  const gain       = total-totalCost;
+  const up         = gain>=0;
+
+  const se=document.getElementById('sumEtf');
+  const sc=document.getElementById('sumCrypto');
+  const st=document.getElementById('sumTotal');
+  const sco=document.getElementById('sumCost');
+  const sg=document.getElementById('sumGain');
+  const su=document.getElementById('investSummaryUpdated');
+  if(se) se.textContent=fmt(etfTotal);
+  if(sc) sc.textContent=fmt(cryptoTotal);
+  if(st) st.textContent=fmt(total);
+  if(sco) sco.textContent=fmt(totalCost);
+  if(sg){
+    sg.textContent=(up?'+':'-')+'$'+Math.round(Math.abs(gain)).toLocaleString();
+    sg.style.color=up?'var(--green)':'var(--red)';
+  }
+  if(su&&ethLastUpdated) su.textContent='ETH '+ethLastUpdated.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})+' 更新';
+}
+
 function renderBudgetSettings(){
   document.getElementById('budgetSettingList').innerHTML=state.categories.map((c,i)=>`
     <div class="list-item">
@@ -1036,7 +1095,7 @@ async function fetchETHPrice(){
     const data=await res.json();
     ethPriceTWD=Math.round(parseFloat(data.data.lastPrice)); ethLastUpdated=new Date();
     state.investments.forEach(inv=>{ if(inv.type==='crypto'&&inv.ticker==='ETH'){ inv.currentTWD=Math.round(inv.amount*ethPriceTWD); inv.livePrice=ethPriceTWD; } });
-    renderInvestments(); renderHero(); showToast(`ETH ${ethPriceTWD.toLocaleString()} TWD`);
+    renderInvestments(); renderInvestSummary(); renderHero(); showToast(`ETH ${ethPriceTWD.toLocaleString()} TWD`);
   }catch(e){ console.warn('ETH 抓取失敗',e); showToast('ETH 價格抓取失敗'); }
   finally{ if(btn){ btn.textContent='↻ ETH'; btn.disabled=false; } }
 }
