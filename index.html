@@ -17,8 +17,6 @@ import { getFirestore, doc, setDoc, getDoc }
   from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  // ⚠️ Firebase 設定已由 Firebase Security Rules 保護
-  // 建議在 Firebase Console 限制此金鑰的允許網域
   apiKey: "AIzaSyDWr4lUqAsU_Fij-hnjEHryC3bsf2rMk2I",
   authDomain: "money-873d5.firebaseapp.com",
   projectId: "money-873d5",
@@ -210,9 +208,8 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 @keyframes spin{to{transform:rotate(360deg);}}
 #loginScreen{display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
 
-/* AI Card */
-.ai-result{margin-top:15px;padding-top:15px;border-top:1px dashed rgba(77,159,255,0.3);font-size:13px;line-height:1.9;color:#d1d1d1;}
-.ai-result strong{color:var(--blue);font-size:14px;}
+/* 重複結算警告 */
+.archive-warn{background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.3);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:12px;}
 </style>
 </head>
 <body>
@@ -281,8 +278,6 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       <div class="stat-item"><div class="stat-num" id="heroFlow">$0</div><div class="stat-lbl">本月結餘</div></div>
     </div>
   </div>
-
-
 
   <!-- Tabs -->
   <div class="tab-bar">
@@ -454,7 +449,7 @@ const STORAGE_KEY = 'finance_dashboard_v2';
 let currentEditType = null, currentEditIndex = null, journalFilter = 'all';
 let ethPriceTWD = null, ethLastUpdated = null;
 
-function fmt(n){ return '$' + Math.round(Math.abs(n)).toLocaleString(); }
+function fmt(n){ return (n<0?'-$':'$') + Math.round(Math.abs(n)).toLocaleString(); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function getCat(id){ return state.categories.find(c=>c.id===id); }
 function getAcc(id){ return state.accounts.find(a=>a.id===id); }
@@ -575,9 +570,9 @@ function renderJournal(){
               <div class="je-left">
                 <div style="display:flex;align-items:center;gap:6px;font-size:14px;">
                   <span style="color:var(--blue);">⇄</span>
-                  <span>${fa?.name||'?'}</span>
+                  <span>${fa?.name||'（已刪除帳戶）'}</span>
                   <span style="color:var(--muted);font-size:12px;">→</span>
-                  <span>${ta?.name||'?'}</span>
+                  <span>${ta?.name||'（已刪除帳戶）'}</span>
                 </div>
                 <div style="margin-top:4px;">
                   <span class="je-cat" style="background:rgba(77,159,255,0.15);color:var(--blue);">轉帳</span>
@@ -652,13 +647,22 @@ function openJournalModal(entry){
   openModal('新增交易',buildJournalFields(entry),entry?'儲存':'新增');
 }
 function editJournalEntry(id){ const e=state.journal.find(e=>e.id===id); if(e) openJournalModal(e); }
+
 function deleteJournalEntry(id){
   if(!confirm('確定刪除？帳戶餘額將自動還原。')) return;
   const e=state.journal.find(e=>e.id===id);
-  if(e){ const acc=getAcc(e.accountId); if(acc){ if(e.type==='expense') acc.value+=e.amount; else acc.value-=e.amount; } }
+  if(e){
+    const acc=getAcc(e.accountId);
+    if(acc){
+      if(e.type==='expense') acc.value+=e.amount;
+      else acc.value-=e.amount;
+    }
+    // 若帳戶已被刪除，僅刪除紀錄不調整餘額（靜默處理）
+  }
   state.journal=state.journal.filter(e=>e.id!==id);
   saveState(); renderAll(); showToast('已刪除，餘額已還原');
 }
+
 function saveJournalEntry(){
   const amount=parseFloat(document.getElementById('f_amount').value)||0;
   const date=document.getElementById('f_date').value;
@@ -670,17 +674,32 @@ function saveJournalEntry(){
   const inferredType=cat?cat.type:_journalType;
   const entry={ id:currentEditIndex||uid(), type:inferredType, date, amount, categoryId, accountId, desc };
   const acc=getAcc(accountId);
-  if(acc){
-    if(currentEditType==='journal_edit'){
-      const old=state.journal.find(e=>e.id===currentEditIndex);
-      if(old){ const oa=getAcc(old.accountId); if(oa){ if(old.type==='expense') oa.value+=old.amount; else oa.value-=old.amount; } }
+
+  // 編輯模式：先還原舊帳戶餘額
+  if(currentEditType==='journal_edit'){
+    const old=state.journal.find(e=>e.id===currentEditIndex);
+    if(old){
+      const oa=getAcc(old.accountId);
+      if(oa){
+        if(old.type==='expense') oa.value+=old.amount;
+        else oa.value-=old.amount;
+      }
+      // 若舊帳戶已刪除，跳過還原，繼續儲存
     }
-    if(entry.type==='expense') acc.value-=amount; else acc.value+=amount;
   }
+
+  // 套用新帳戶餘額
+  if(acc){
+    if(entry.type==='expense') acc.value-=amount;
+    else acc.value+=amount;
+  }
+
   if(currentEditType==='journal_edit'){
     const idx=state.journal.findIndex(e=>e.id===currentEditIndex);
     if(idx>=0) state.journal[idx]=entry;
-  } else { state.journal.push(entry); }
+  } else {
+    state.journal.push(entry);
+  }
   saveState(); closeModal(); renderAll();
   showToast(entry.type==='expense'?`-${fmt(amount)} 已記錄`:`+${fmt(amount)} 已記錄`);
 }
@@ -704,6 +723,7 @@ function openTransferModal(){
     <div class="form-group"><label>備註（選填）</label><input type="text" id="f_transfer_note" placeholder="例：提領現金"></div>`,
   '確認轉帳');
 }
+
 function saveTransferEntry(){
   const date=document.getElementById('f_transfer_date').value;
   const fromId=document.getElementById('f_from_acc').value;
@@ -719,12 +739,18 @@ function saveTransferEntry(){
   state.journal.push({ id:uid(), type:'transfer', date, amount, fromAccountId:fromId, toAccountId:toId, note });
   saveState(); closeModal(); renderAll(); showToast(`⇄ 轉帳 ${fmt(amount)} 完成`);
 }
+
 function deleteTransferEntry(id){
   if(!confirm('確定刪除轉帳？帳戶餘額將自動還原。')) return;
   const e=state.journal.find(e=>e.id===id);
   if(e&&e.type==='transfer'){
-    const fa=getAcc(e.fromAccountId), ta=getAcc(e.toAccountId);
-    if(fa) fa.value+=e.amount; if(ta) ta.value-=e.amount;
+    const fa=getAcc(e.fromAccountId);
+    const ta=getAcc(e.toAccountId);
+    // FIX: 分別判斷帳戶是否存在，避免其中一個已刪除時靜默跳過
+    if(fa) fa.value+=e.amount;
+    else showToast('⚠️ 轉出帳戶已不存在，僅刪除紀錄');
+    if(ta) ta.value-=e.amount;
+    else showToast('⚠️ 轉入帳戶已不存在，僅刪除紀錄');
   }
   state.journal=state.journal.filter(e=>e.id!==id);
   saveState(); renderAll(); showToast('轉帳已刪除，餘額已還原');
@@ -779,14 +805,19 @@ function renderSummary(){
 // ASSETS
 // ================================================================
 function renderAccounts(){
-  document.getElementById('accountsList').innerHTML=state.accounts.map((a,i)=>`
-    <div class="list-item">
-      <div><div class="item-name">${a.name}</div><div class="item-sub">${a.sub}</div></div>
+  document.getElementById('accountsList').innerHTML=state.accounts.map((a,i)=>{
+    const isNeg=a.value<0;
+    return `<div class="list-item">
+      <div>
+        <div class="item-name">${a.name}</div>
+        <div class="item-sub">${a.sub}${isNeg?' · <span style="color:var(--red);font-size:10px;">⚠ 餘額為負</span>':''}</div>
+      </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <div class="item-val">${fmt(a.value)}</div>
+        <div class="item-val" style="color:${isNeg?'var(--red)':'var(--green)'};">${fmt(a.value)}</div>
         <button class="edit-btn" onclick="editAccount(${i})">編輯</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderInvestments(){
@@ -918,7 +949,7 @@ function toggleHist(idx){ const el=document.getElementById('hd-'+idx); if(el) el
 function deleteHistory(idx){ if(!confirm('確定刪除？')) return; state.history.splice(idx,1); saveState(); renderHistory(); }
 
 // ================================================================
-// ARCHIVE
+// ARCHIVE — FIX: 偵測重複結算同一個月份
 // ================================================================
 function archiveMonth(){
   const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
@@ -932,8 +963,15 @@ function archiveMonth(){
   const dy=now.getDate()<=5;
   const defaultYear=dy?(now.getMonth()===0?now.getFullYear()-1:now.getFullYear()):now.getFullYear();
   const defaultMonth=dy?(now.getMonth()===0?12:now.getMonth()):now.getMonth()+1;
+  const defaultMonthStr=`${defaultYear}/${String(defaultMonth).padStart(2,'0')}`;
+
+  // 偵測是否已存在相同月份存檔
+  const archiveMonthLabel=`${defaultYear} 年 ${defaultMonth} 月`;
+  const alreadyArchived=state.history&&state.history.some(h=>h.month===archiveMonthLabel);
+
   currentEditType='archive';
   openModal('📦 月底結算',`
+    ${alreadyArchived?`<div class="archive-warn">⚠️ ${archiveMonthLabel} 已有存檔紀錄，若繼續將新增一筆重複存檔。建議先刪除舊存檔再結算。</div>`:''}
     <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">本月摘要</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -944,10 +982,11 @@ function archiveMonth(){
         <div style="grid-column:1/-1"><div style="font-size:11px;color:var(--muted);">當前淨資產</div><div style="font-family:'Space Mono',monospace;font-size:15px;">$${netWorth.toLocaleString()}</div></div>
       </div>
     </div>
-    <div class="form-group"><label>結算月份（格式：2026/03）</label><input type="text" id="f_archiveMonth" value="${defaultYear}/${String(defaultMonth).padStart(2,'0')}"></div>
+    <div class="form-group"><label>結算月份（格式：2026/03）</label><input type="text" id="f_archiveMonth" value="${defaultMonthStr}"></div>
     <div style="font-size:11px;color:var(--muted);">⚠️ 結算後交易紀錄保留，不影響帳戶餘額。</div>`,
   '確認結算');
 }
+
 function confirmArchive(){
   const raw=(document.getElementById('f_archiveMonth')?.value||'').trim();
   if(!raw.match(/^\d{4}\/\d{2}$/)) { alert('格式錯誤，請輸入如 2026/03'); return; }
@@ -968,7 +1007,7 @@ function confirmArchive(){
 }
 
 // ================================================================
-// MODAL ENGINE
+// MODAL ENGINE — FIX: closeModal 還原儲存按鈕
 // ================================================================
 function openModal(title,fields,confirmLabel){
   document.getElementById('modalTitle').textContent=title;
@@ -976,7 +1015,13 @@ function openModal(title,fields,confirmLabel){
   document.getElementById('modalConfirmBtn').textContent=confirmLabel||'儲存';
   document.getElementById('modalOverlay').classList.add('open');
 }
-function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); currentEditType=null; currentEditIndex=null; }
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('open');
+  // FIX Bug1: 確保每次關閉都還原儲存按鈕顯示
+  document.getElementById('modalConfirmBtn').style.display='';
+  currentEditType=null;
+  currentEditIndex=null;
+}
 function val(id){ return document.getElementById(id)?.value||''; }
 function numval(id){ return parseFloat(val(id))||0; }
 function field(label,id,value,type='text'){
@@ -984,17 +1029,23 @@ function field(label,id,value,type='text'){
   return `<div class="form-group"><label>${label}</label><input type="${type}" id="${id}" value="${safe}"></div>`;
 }
 function saveModal(){
-  if(currentEditType==='invest_type_select')                           { return; }
-  if(currentEditType==='transfer_new')                               { saveTransferEntry(); return; }
-  if(currentEditType==='archive')                                    { confirmArchive(); return; }
-  if(currentEditType==='journal_new'||currentEditType==='journal_edit') { saveJournalEntry(); return; }
+  if(currentEditType==='invest_type_select')                              { return; }
+  if(currentEditType==='transfer_new')                                    { saveTransferEntry(); return; }
+  if(currentEditType==='archive')                                         { confirmArchive(); return; }
+  if(currentEditType==='journal_new'||currentEditType==='journal_edit')   { saveJournalEntry(); return; }
   if(currentEditType==='account_edit'){
-    const a=state.accounts[currentEditIndex]; a.name=val('f_name'); a.sub=val('f_sub'); a.value=numval('f_value');
-    saveState(); closeModal(); renderAccounts(); renderHero(); return;
+    const a=state.accounts[currentEditIndex];
+    a.name=val('f_name'); a.sub=val('f_sub'); a.value=numval('f_value');
+    saveState(); closeModal(); renderAccounts(); renderHero();
+    if(a.value<0) showToast('⚠️ 注意：帳戶餘額為負數');
+    return;
   }
   if(currentEditType==='account_new'){
-    state.accounts.push({id:uid(),name:val('f_name'),sub:val('f_sub'),value:numval('f_value')});
-    saveState(); closeModal(); renderAccounts(); renderHero(); return;
+    const newVal=numval('f_value');
+    state.accounts.push({id:uid(),name:val('f_name'),sub:val('f_sub'),value:newVal});
+    saveState(); closeModal(); renderAccounts(); renderHero();
+    if(newVal<0) showToast('⚠️ 注意：帳戶餘額為負數');
+    return;
   }
   if(currentEditType==='cat_edit'){
     const c=state.categories[currentEditIndex]; c.name=val('f_name'); c.budget=numval('f_budget');
@@ -1008,21 +1059,21 @@ function saveModal(){
     const inv=state.investments[currentEditIndex];
     inv.name=val('f_name'); inv.ticker=val('f_ticker'); inv.shares=numval('f_shares');
     inv.costPrice=numval('f_cost'); inv.currentPrice=numval('f_price'); inv.breakeven=numval('f_breakeven');
-    saveState(); closeModal(); renderInvestments(); renderHero(); return;
+    saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); return;
   }
   if(currentEditType==='invest_crypto'){
     const inv=state.investments[currentEditIndex];
     inv.name=val('f_name'); inv.ticker=val('f_ticker'); inv.amount=parseFloat(val('f_amount'))||0;
     inv.costTWD=numval('f_cost'); inv.currentTWD=numval('f_current'); inv.avgPrice=numval('f_avg');
-    saveState(); closeModal(); renderInvestments(); renderHero(); return;
+    saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); return;
   }
   if(currentEditType==='invest_new_etf'){
     state.investments.push({name:val('f_name'),ticker:val('f_ticker'),type:'etf',shares:numval('f_shares'),costPrice:numval('f_cost'),currentPrice:numval('f_price'),breakeven:numval('f_breakeven')});
-    saveState(); closeModal(); renderInvestments(); renderHero(); return;
+    saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); return;
   }
   if(currentEditType==='invest_new_crypto'){
     state.investments.push({name:val('f_name'),ticker:val('f_ticker'),type:'crypto',amount:parseFloat(val('f_amount'))||0,costTWD:numval('f_cost'),currentTWD:numval('f_current'),avgPrice:numval('f_avg')});
-    saveState(); closeModal(); renderInvestments(); renderHero(); return;
+    saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); return;
   }
 }
 
@@ -1047,7 +1098,6 @@ function editCategory(i){
 function deleteCategory(i){ if(!confirm('確定刪除？')) return; state.categories.splice(i,1); saveState(); closeModal(); renderBudgetSettings(); renderSummary(); }
 
 function addInvestItem(){
-  // 使用 modal 取代 confirm() 讓使用者選擇類型
   currentEditType='invest_type_select';
   openModal('新增投資項目',`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0;">
@@ -1062,7 +1112,7 @@ function addInvestItem(){
         <div style="font-size:11px;color:var(--muted);margin-top:4px;">ETH、BTC 等</div>
       </button>
     </div>`, '');
-  // 隱藏儲存按鈕
+  // FIX Bug1: 隱藏儲存按鈕（closeModal 會還原）
   document.getElementById('modalConfirmBtn').style.display='none';
 }
 function selectInvestType(type){
@@ -1082,10 +1132,10 @@ function editInvestItem(i){
   if(inv.type==='etf'){ currentEditType='invest_etf'; currentEditIndex=i; openModal('編輯 ETF',field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持股數量','f_shares',inv.shares,'number')+field('成本均價','f_cost',inv.costPrice,'number')+field('現價','f_price',inv.currentPrice,'number')+field('損益兩平價','f_breakeven',inv.breakeven,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`); }
   else { currentEditType='invest_crypto'; currentEditIndex=i; openModal('編輯虛擬貨幣',field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持倉數量','f_amount',inv.amount)+field('成本 (TWD)','f_cost',inv.costTWD,'number')+field('現值 (TWD)','f_current',inv.currentTWD,'number')+field('成交均價 (TWD)','f_avg',inv.avgPrice,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`); }
 }
-function deleteInvest(i){ if(!confirm('確定刪除？')) return; state.investments.splice(i,1); saveState(); closeModal(); renderInvestments(); renderHero(); }
+function deleteInvest(i){ if(!confirm('確定刪除？')) return; state.investments.splice(i,1); saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); }
 
 // ================================================================
-// ETH 即時價格
+// ETH 即時價格 — FIX: 抓取後呼叫 saveState 同步至 Firebase
 // ================================================================
 async function fetchETHPrice(){
   const btn=document.getElementById('ethRefreshBtn');
@@ -1095,7 +1145,11 @@ async function fetchETHPrice(){
     const data=await res.json();
     ethPriceTWD=Math.round(parseFloat(data.data.lastPrice)); ethLastUpdated=new Date();
     state.investments.forEach(inv=>{ if(inv.type==='crypto'&&inv.ticker==='ETH'){ inv.currentTWD=Math.round(inv.amount*ethPriceTWD); inv.livePrice=ethPriceTWD; } });
-    renderInvestments(); renderInvestSummary(); renderHero(); showToast(`ETH ${ethPriceTWD.toLocaleString()} TWD`);
+    // FIX Bug5: ETH 價格更新後同步儲存至 Firebase
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+    if(window._fbSave) window._fbSave(state);
+    renderInvestments(); renderInvestSummary(); renderHero();
+    showToast(`ETH ${ethPriceTWD.toLocaleString()} TWD`);
   }catch(e){ console.warn('ETH 抓取失敗',e); showToast('ETH 價格抓取失敗'); }
   finally{ if(btn){ btn.textContent='↻ ETH'; btn.disabled=false; } }
 }
@@ -1116,10 +1170,8 @@ function importData(){
     reader.onload=ev=>{
       try{
         const p=JSON.parse(ev.target.result);
-        // 驗證基本結構
         if(typeof p !== 'object' || p === null){ alert('資料格式錯誤'); return; }
         if(p.categories && Array.isArray(p.categories)){
-          // 新版格式：需含 categories
           if(p.accounts    && Array.isArray(p.accounts))    state.accounts    = p.accounts;
           if(p.investments && Array.isArray(p.investments)) state.investments = p.investments;
           if(p.categories  && Array.isArray(p.categories))  state.categories  = p.categories;
@@ -1127,7 +1179,6 @@ function importData(){
           if(p.history     && Array.isArray(p.history))     state.history     = p.history;
           saveState(); renderAll(); showToast('匯入成功 ✓');
         } else if(p.accounts || p.investments || p.history){
-          // 舊版格式
           if(p.accounts    && Array.isArray(p.accounts))    state.accounts    = p.accounts.map(a=>({...a,id:a.id||uid()}));
           if(p.investments && Array.isArray(p.investments)) state.investments = p.investments;
           if(p.history     && Array.isArray(p.history))     state.history     = p.history;
@@ -1145,12 +1196,10 @@ function importData(){
 // ================================================================
 // INIT
 // ================================================================
-// ================================================================
-// API KEY SETTINGS
-// ================================================================
-
-document.getElementById('modalOverlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
-loadState(); // Firebase 登入後會覆蓋
+document.getElementById('modalOverlay').addEventListener('click',function(e){
+  if(e.target===this) closeModal();
+});
+loadState();
 </script>
 </body>
 </html>
