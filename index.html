@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -853,7 +854,7 @@ function renderInvestments(){
         </div>
       </div>`;
     } else {
-      const gain=inv.currentTWD-inv.costTWD, gainPct=((gain/inv.costTWD)*100).toFixed(2), up=gain>=0;
+      const calcCost=inv.avgPrice*inv.amount, gain=inv.currentTWD-calcCost, gainPct=(calcCost>0?((gain/calcCost)*100):0).toFixed(2), up=gain>=0;
       const liveStr=inv.livePrice
         ?`<span style="color:var(--green);font-size:10px;">● 即時</span> $${inv.livePrice.toLocaleString()} TWD/ETH`
         :`${inv.avgPrice.toLocaleString()} TWD（手動）`;
@@ -867,10 +868,11 @@ function renderInvestments(){
           </div>
         </div>
         <div class="invest-grid">
-          <div><div class="invest-stat-l">持倉</div><div class="invest-stat-v">${inv.amount} ETH</div></div>
+          <div><div class="invest-stat-l">持倉</div><div class="invest-stat-v">${inv.amount} ${inv.ticker}</div></div>
           <div><div class="invest-stat-l">現值</div><div class="invest-stat-v green">${fmt(inv.currentTWD)}</div></div>
           <div style="grid-column:1/-1"><div class="invest-stat-l">即時單價</div><div class="invest-stat-v" style="font-size:12px;">${liveStr}</div></div>
           <div><div class="invest-stat-l">成交均價</div><div class="invest-stat-v">${inv.avgPrice.toLocaleString()} TWD</div></div>
+          <div><div class="invest-stat-l">持倉成本</div><div class="invest-stat-v">${fmt(calcCost)}</div></div>
           <div><div class="invest-stat-l">預估損益</div><div class="invest-stat-v ${up?'green':'red'}">${up?'+':''}${fmt(gain)}</div></div>
         </div>
         ${ethLastUpdated?`<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:right;">更新 ${updStr}</div>`:''}
