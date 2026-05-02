@@ -304,7 +304,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
         <button class="edit-btn" id="filter-transfer" onclick="setFilter('transfer')">轉帳</button>
         <input type="month" id="filterMonth"
           style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 10px;font-size:12px;font-family:'Space Mono',monospace;outline:none;"
-          onchange="renderJournal()">
+          onchange="renderJournal();renderSummary();">
       </div>
       <div id="journalList"></div>
     </div>
@@ -315,14 +315,14 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     <div class="grid grid-2" style="margin-bottom:16px;">
       <div class="card">
         <div class="section-header">
-          <div class="card-title">本月收入</div>
+          <div class="card-title" id="summaryMonthInc">本月收入</div>
           <div id="realIncTotal" style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--green);"></div>
         </div>
         <div id="realIncList"></div>
       </div>
       <div class="card">
         <div class="section-header">
-          <div class="card-title">本月支出</div>
+          <div class="card-title" id="summaryMonthExp">本月支出</div>
           <div id="realExpTotal" style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--red);"></div>
         </div>
         <div id="realExpList"></div>
@@ -490,7 +490,7 @@ function renderAll(){
   const dateEl=document.getElementById('currentDate');
   const mfEl=document.getElementById('filterMonth');
   if(dateEl) dateEl.textContent=`${now.getFullYear()} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
-  if(mfEl&&!mfEl.value) mfEl.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  if(mfEl) mfEl.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderBudgetSettings(); renderHistory();
 }
 
@@ -498,7 +498,9 @@ function renderHero(){
   const acctTotal=state.accounts.reduce((s,a)=>s+a.value,0);
   const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
   const total=acctTotal+investTWD;
-  const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
+  const mfHero=document.getElementById('filterMonth');
+  const mk=(mfHero&&mfHero.value)?mfHero.value:getCurrentMonthKey();
+  const entries=getMonthJournal(mk);
   const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
   const totalExp=entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
   const flow=totalInc-totalExp;
@@ -760,10 +762,19 @@ function deleteTransferEntry(id){
 // SUMMARY
 // ================================================================
 function renderSummary(){
-  const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
+  const mf=document.getElementById('filterMonth');
+  const mk=(mf&&mf.value)?mf.value:getCurrentMonthKey();
+  const entries=getMonthJournal(mk);
   const incMap=sumByCategory(entries,'income'), expMap=sumByCategory(entries,'expense');
   const totalInc=Object.values(incMap).reduce((s,v)=>s+v,0);
   const totalExp=Object.values(expMap).reduce((s,v)=>s+v,0);
+  // 動態更新標題顯示當前查看月份
+  const [mkY,mkM]=mk.split('-');
+  const monthLabel=`${mkY} 年 ${parseInt(mkM)} 月`;
+  const incTitle=document.getElementById('summaryMonthInc');
+  const expTitle=document.getElementById('summaryMonthExp');
+  if(incTitle) incTitle.textContent=`${monthLabel} 收入`;
+  if(expTitle) expTitle.textContent=`${monthLabel} 支出`;
   document.getElementById('realIncTotal').textContent=fmt(totalInc);
   document.getElementById('realExpTotal').textContent=fmt(totalExp);
 
@@ -952,18 +963,22 @@ function deleteHistory(idx){ if(!confirm('確定刪除？')) return; state.histo
 // ARCHIVE — FIX: 偵測重複結算同一個月份
 // ================================================================
 function archiveMonth(){
-  const mk=getCurrentMonthKey(), entries=getMonthJournal(mk);
+  // 預設結算上個月（月初5天內），否則結算當月
+  const now=new Date();
+  const dy=now.getDate()<=5;
+  const defaultYear=dy?(now.getMonth()===0?now.getFullYear()-1:now.getFullYear()):now.getFullYear();
+  const defaultMonth=dy?(now.getMonth()===0?12:now.getMonth()):now.getMonth()+1;
+  const defaultMonthStr=`${defaultYear}/${String(defaultMonth).padStart(2,'0')}`;
+
+  // 摘要抓預設結算月份的資料（不是當前月份）
+  const mk=`${defaultYear}-${String(defaultMonth).padStart(2,'0')}`;
+  const entries=getMonthJournal(mk);
   const totalInc=entries.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
   const totalExp=entries.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
   const net=totalInc-totalExp;
   const acctTotal=state.accounts.reduce((s,a)=>s+a.value,0);
   const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
   const netWorth=acctTotal+investTWD;
-  const now=new Date();
-  const dy=now.getDate()<=5;
-  const defaultYear=dy?(now.getMonth()===0?now.getFullYear()-1:now.getFullYear()):now.getFullYear();
-  const defaultMonth=dy?(now.getMonth()===0?12:now.getMonth()):now.getMonth()+1;
-  const defaultMonthStr=`${defaultYear}/${String(defaultMonth).padStart(2,'0')}`;
 
   // 偵測是否已存在相同月份存檔
   const archiveMonthLabel=`${defaultYear} 年 ${defaultMonth} 月`;
@@ -973,7 +988,7 @@ function archiveMonth(){
   openModal('📦 月底結算',`
     ${alreadyArchived?`<div class="archive-warn">⚠️ ${archiveMonthLabel} 已有存檔紀錄，若繼續將新增一筆重複存檔。建議先刪除舊存檔再結算。</div>`:''}
     <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">本月摘要</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">${archiveMonthLabel} 摘要</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div><div style="font-size:11px;color:var(--muted);">交易筆數</div><div style="font-family:'Space Mono',monospace;font-size:15px;">${entries.length} 筆</div></div>
         <div><div style="font-size:11px;color:var(--muted);">結餘</div><div style="font-family:'Space Mono',monospace;font-size:15px;color:${net>=0?'var(--green)':'var(--red)'};">${net>=0?'+':''}$${net.toLocaleString()}</div></div>
