@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -954,6 +953,23 @@ function renderHistory(){
         ${incD?`<div style="font-size:11px;color:var(--green);margin-bottom:6px;">收入明細</div>${incD}`:''}
         ${expD?`<div style="font-size:11px;color:var(--red);margin-top:10px;margin-bottom:6px;">支出明細</div>${expD}`:''}
         ${!incD&&!expD?'<div style="font-size:12px;color:var(--muted);">無明細資料</div>':''}
+        ${(h.acctSnapshot&&h.acctSnapshot.length)?`
+          <div style="font-size:11px;color:var(--blue);margin-top:12px;margin-bottom:6px;">帳戶快照</div>
+          ${h.acctSnapshot.map(a=>`
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+              <span style="font-size:12px;">${a.name}</span>
+              <span style="font-family:'Space Mono',monospace;font-size:12px;">$${a.value.toLocaleString()}</span>
+            </div>`).join('')}`:''}
+        ${(h.investSnapshot&&h.investSnapshot.length)?`
+          <div style="font-size:11px;color:var(--yellow);margin-top:12px;margin-bottom:6px;">投資組合快照</div>
+          ${h.investSnapshot.map(i=>{
+            const mv=i.type==='etf'?i.marketValue:i.currentTWD;
+            const g=i.gain||0;
+            return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+              <span style="font-size:12px;">${i.name}（${i.ticker}）</span>
+              <span style="font-family:'Space Mono',monospace;font-size:12px;">$${mv.toLocaleString()} <span style="color:${g>=0?'var(--green)':'var(--red)'};font-size:10px;">${g>=0?'+':''}$${Math.round(g).toLocaleString()}</span></span>
+            </div>`;
+          }).join('')}`:''}
       </div>
     </div>`;
   }).join('');
@@ -1015,10 +1031,16 @@ function confirmArchive(){
   const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
   const incMap=sumByCategory(entries,'income'), expMap=sumByCategory(entries,'expense');
   if(!state.history) state.history=[];
+  const acctSnapshot=state.accounts.map(a=>({name:a.name,value:a.value}));
+  const investSnapshot=state.investments.map(i=>i.type==='etf'
+    ?{name:i.name,ticker:i.ticker,type:'etf',shares:i.shares,currentPrice:i.currentPrice,marketValue:i.shares*i.currentPrice,costPrice:i.costPrice,gain:i.shares*(i.currentPrice-i.costPrice)}
+    :{name:i.name,ticker:i.ticker,type:'crypto',amount:i.amount,avgPrice:i.avgPrice,currentTWD:i.currentTWD,gain:i.currentTWD-(i.avgPrice*i.amount)}
+  );
   state.history.unshift({
     month:monthKey, income:totalInc, expense:totalExp, net:totalInc-totalExp, netWorth:acctTotal+investTWD,
     incBreakdown:state.categories.filter(c=>c.type==='income'&&incMap[c.id]>0).map(c=>({name:c.name,value:incMap[c.id]||0})),
     expBreakdown:state.categories.filter(c=>c.type==='expense'&&expMap[c.id]>0).map(c=>({name:c.name,value:expMap[c.id]||0,color:c.color})),
+    acctSnapshot, investSnapshot,
   });
   saveState(); closeModal(); renderAll(); showToast(`${monthKey} 結算完成 ✓`);
 }
