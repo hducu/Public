@@ -1140,7 +1140,7 @@ function saveModal(){
   }
   if(currentEditType==='cat_new'){
     state.categories.push({id:uid(),name:val('f_name'),color:randomColor(),budget:numval('f_budget'),type:val('f_cattype')||'expense'});
-    saveState(); closeModal(); renderBudgetSettings(); return;
+    saveState(); closeModal(); renderBudgetSettings(); renderSummary(); return;
   }
   if(currentEditType==='invest_etf'){
     const inv=state.investments[currentEditIndex];
