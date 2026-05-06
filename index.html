@@ -402,6 +402,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       <div class="section-header">
         <div class="card-title">歷史收支存檔</div>
         <button class="edit-btn" onclick="archiveMonth()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);">⌛ 月底結算</button>
+        <button class="edit-btn" onclick="manualArchive()" style="color:var(--blue);border-color:rgba(100,180,255,0.4);">✏️ 手動補建</button>
       </div>
       <div id="historyList"></div>
     </div>
@@ -978,6 +979,52 @@ function toggleHist(idx){ const el=document.getElementById('hd-'+idx); if(el) el
 function deleteHistory(idx){ if(!confirm('確定刪除？')) return; state.history.splice(idx,1); saveState(); renderHistory(); }
 
 // ================================================================
+// MANUAL ARCHIVE — 手動補建歷史結算
+// ================================================================
+function manualArchive(){
+  currentEditType='manualArchive';
+  const expCats=state.categories.filter(c=>c.type==='expense');
+  const incCats=state.categories.filter(c=>c.type==='income');
+  const expFields=expCats.map(c=>`
+    <div class="form-group">
+      <label><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.color||'#aaa'};margin-right:6px;"></span>${c.name}（支出）</label>
+      <input type="number" id="mexp_${c.id}" placeholder="0" min="0">
+    </div>`).join('');
+  const incFields=incCats.map(c=>`
+    <div class="form-group">
+      <label>${c.name}（收入）</label>
+      <input type="number" id="minc_${c.id}" placeholder="0" min="0">
+    </div>`).join('');
+  openModal('✏️ 手動補建歷史結算',`
+    <div class="form-group"><label>結算月份（格式：2026/03）</label><input type="text" id="f_manualMonth" placeholder="2026/03"></div>
+    <div style="font-size:11px;color:var(--green);margin:10px 0 6px;">收入明細</div>
+    ${incFields}
+    <div style="font-size:11px;color:var(--red);margin:10px 0 6px;">支出明細</div>
+    ${expFields}
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;">⚠️ 淨資產快照將留空，可事後手動補充。</div>
+  `, '確認補建');
+}
+
+function confirmManualArchive(){
+  const raw=(document.getElementById('f_manualMonth')?.value||'').trim();
+  if(!raw.match(/^\d{4}\/\d{2}$/)) { alert('格式錯誤，請輸入如 2026/03'); return; }
+  const [y,m]=raw.split('/'), monthKey=`${y} 年 ${parseInt(m)} 月`;
+  const expCats=state.categories.filter(c=>c.type==='expense');
+  const incCats=state.categories.filter(c=>c.type==='income');
+  const expBreakdown=expCats.map(c=>({name:c.name,color:c.color,value:parseFloat(document.getElementById('mexp_'+c.id)?.value)||0})).filter(e=>e.value>0);
+  const incBreakdown=incCats.map(c=>({name:c.name,value:parseFloat(document.getElementById('minc_'+c.id)?.value)||0})).filter(i=>i.value>0);
+  const totalExp=expBreakdown.reduce((s,e)=>s+e.value,0);
+  const totalInc=incBreakdown.reduce((s,i)=>s+i.value,0);
+  if(!state.history) state.history=[];
+  state.history.push({
+    month:monthKey, income:totalInc, expense:totalExp, net:totalInc-totalExp, netWorth:null,
+    incBreakdown, expBreakdown, acctSnapshot:[], investSnapshot:[],
+  });
+  state.history.sort((a,b)=>b.month.localeCompare(a.month));
+  saveState(); closeModal(); renderAll(); showToast(`${monthKey} 補建完成 ✓`);
+}
+
+// ================================================================
 // ARCHIVE — FIX: 偵測重複結算同一個月份
 // ================================================================
 function archiveMonth(){
@@ -1071,6 +1118,7 @@ function saveModal(){
   if(currentEditType==='invest_type_select')                              { return; }
   if(currentEditType==='transfer_new')                                    { saveTransferEntry(); return; }
   if(currentEditType==='archive')                                         { confirmArchive(); return; }
+  if(currentEditType==='manualArchive')                                   { confirmManualArchive(); return; }
   if(currentEditType==='journal_new'||currentEditType==='journal_edit')   { saveJournalEntry(); return; }
   if(currentEditType==='account_edit'){
     const a=state.accounts[currentEditIndex];
