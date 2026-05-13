@@ -871,7 +871,7 @@ function renderInvestments(){
         </div>
       </div>`;
     } else {
-      const gain=inv.currentTWD-inv.costTWD, gainPct=((gain/inv.costTWD)*100).toFixed(2), up=gain>=0;
+      const calcCost=inv.avgPrice*inv.amount, gain=inv.currentTWD-calcCost, gainPct=(calcCost>0?((gain/calcCost)*100):0).toFixed(2), up=gain>=0;
       const liveStr=inv.livePrice
         ?`<span style="color:var(--green);font-size:10px;">● 即時</span> $${inv.livePrice.toLocaleString()} TWD/ETH`
         :`${inv.avgPrice.toLocaleString()} TWD（手動）`;
