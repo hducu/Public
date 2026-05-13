@@ -402,7 +402,6 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       <div class="section-header">
         <div class="card-title">歷史收支存檔</div>
         <button class="edit-btn" onclick="archiveMonth()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);">⌛ 月底結算</button>
-        <button class="edit-btn" onclick="manualArchive()" style="color:var(--blue);border-color:rgba(100,180,255,0.4);">✏️ 手動補建</button>
       </div>
       <div id="historyList"></div>
     </div>
@@ -854,7 +853,7 @@ function renderInvestments(){
         </div>
       </div>`;
     } else {
-      const calcCost=inv.avgPrice*inv.amount, gain=inv.currentTWD-calcCost, gainPct=(calcCost>0?((gain/calcCost)*100):0).toFixed(2), up=gain>=0;
+      const gain=inv.currentTWD-inv.costTWD, gainPct=((gain/inv.costTWD)*100).toFixed(2), up=gain>=0;
       const liveStr=inv.livePrice
         ?`<span style="color:var(--green);font-size:10px;">● 即時</span> $${inv.livePrice.toLocaleString()} TWD/ETH`
         :`${inv.avgPrice.toLocaleString()} TWD（手動）`;
@@ -868,11 +867,10 @@ function renderInvestments(){
           </div>
         </div>
         <div class="invest-grid">
-          <div><div class="invest-stat-l">持倉</div><div class="invest-stat-v">${inv.amount} ${inv.ticker}</div></div>
+          <div><div class="invest-stat-l">持倉</div><div class="invest-stat-v">${inv.amount} ETH</div></div>
           <div><div class="invest-stat-l">現值</div><div class="invest-stat-v green">${fmt(inv.currentTWD)}</div></div>
           <div style="grid-column:1/-1"><div class="invest-stat-l">即時單價</div><div class="invest-stat-v" style="font-size:12px;">${liveStr}</div></div>
           <div><div class="invest-stat-l">成交均價</div><div class="invest-stat-v">${inv.avgPrice.toLocaleString()} TWD</div></div>
-          <div><div class="invest-stat-l">持倉成本</div><div class="invest-stat-v">${fmt(calcCost)}</div></div>
           <div><div class="invest-stat-l">預估損益</div><div class="invest-stat-v ${up?'green':'red'}">${up?'+':''}${fmt(gain)}</div></div>
         </div>
         ${ethLastUpdated?`<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:right;">更新 ${updStr}</div>`:''}
@@ -886,7 +884,7 @@ function renderInvestSummary(){
   const cryptoTotal= state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+i.currentTWD,0);
   const total      = etfTotal+cryptoTotal;
   const etfCost    = state.investments.filter(i=>i.type==='etf').reduce((s,i)=>s+i.shares*i.costPrice,0);
-  const cryptoCost = state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+i.costTWD,0);
+  const cryptoCost = state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+(i.avgPrice*i.amount),0);
   const totalCost  = etfCost+cryptoCost;
   const gain       = total-totalCost;
   const up         = gain>=0;
@@ -954,75 +952,12 @@ function renderHistory(){
         ${incD?`<div style="font-size:11px;color:var(--green);margin-bottom:6px;">收入明細</div>${incD}`:''}
         ${expD?`<div style="font-size:11px;color:var(--red);margin-top:10px;margin-bottom:6px;">支出明細</div>${expD}`:''}
         ${!incD&&!expD?'<div style="font-size:12px;color:var(--muted);">無明細資料</div>':''}
-        ${(h.acctSnapshot&&h.acctSnapshot.length)?`
-          <div style="font-size:11px;color:var(--blue);margin-top:12px;margin-bottom:6px;">帳戶快照</div>
-          ${h.acctSnapshot.map(a=>`
-            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
-              <span style="font-size:12px;">${a.name}</span>
-              <span style="font-family:'Space Mono',monospace;font-size:12px;">$${a.value.toLocaleString()}</span>
-            </div>`).join('')}`:''}
-        ${(h.investSnapshot&&h.investSnapshot.length)?`
-          <div style="font-size:11px;color:var(--yellow);margin-top:12px;margin-bottom:6px;">投資組合快照</div>
-          ${h.investSnapshot.map(i=>{
-            const mv=i.type==='etf'?i.marketValue:i.currentTWD;
-            const g=i.gain||0;
-            return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
-              <span style="font-size:12px;">${i.name}（${i.ticker}）</span>
-              <span style="font-family:'Space Mono',monospace;font-size:12px;">$${mv.toLocaleString()} <span style="color:${g>=0?'var(--green)':'var(--red)'};font-size:10px;">${g>=0?'+':''}$${Math.round(g).toLocaleString()}</span></span>
-            </div>`;
-          }).join('')}`:''}
       </div>
     </div>`;
   }).join('');
 }
 function toggleHist(idx){ const el=document.getElementById('hd-'+idx); if(el) el.style.display=el.style.display==='block'?'none':'block'; }
 function deleteHistory(idx){ if(!confirm('確定刪除？')) return; state.history.splice(idx,1); saveState(); renderHistory(); }
-
-// ================================================================
-// MANUAL ARCHIVE — 手動補建歷史結算
-// ================================================================
-function manualArchive(){
-  currentEditType='manualArchive';
-  const expCats=state.categories.filter(c=>c.type==='expense');
-  const incCats=state.categories.filter(c=>c.type==='income');
-  const expFields=expCats.map(c=>`
-    <div class="form-group">
-      <label><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.color||'#aaa'};margin-right:6px;"></span>${c.name}（支出）</label>
-      <input type="number" id="mexp_${c.id}" placeholder="0" min="0">
-    </div>`).join('');
-  const incFields=incCats.map(c=>`
-    <div class="form-group">
-      <label>${c.name}（收入）</label>
-      <input type="number" id="minc_${c.id}" placeholder="0" min="0">
-    </div>`).join('');
-  openModal('✏️ 手動補建歷史結算',`
-    <div class="form-group"><label>結算月份（格式：2026/03）</label><input type="text" id="f_manualMonth" placeholder="2026/03"></div>
-    <div style="font-size:11px;color:var(--green);margin:10px 0 6px;">收入明細</div>
-    ${incFields}
-    <div style="font-size:11px;color:var(--red);margin:10px 0 6px;">支出明細</div>
-    ${expFields}
-    <div style="font-size:11px;color:var(--muted);margin-top:8px;">⚠️ 淨資產快照將留空，可事後手動補充。</div>
-  `, '確認補建');
-}
-
-function confirmManualArchive(){
-  const raw=(document.getElementById('f_manualMonth')?.value||'').trim();
-  if(!raw.match(/^\d{4}\/\d{2}$/)) { alert('格式錯誤，請輸入如 2026/03'); return; }
-  const [y,m]=raw.split('/'), monthKey=`${y} 年 ${parseInt(m)} 月`;
-  const expCats=state.categories.filter(c=>c.type==='expense');
-  const incCats=state.categories.filter(c=>c.type==='income');
-  const expBreakdown=expCats.map(c=>({name:c.name,color:c.color,value:parseFloat(document.getElementById('mexp_'+c.id)?.value)||0})).filter(e=>e.value>0);
-  const incBreakdown=incCats.map(c=>({name:c.name,value:parseFloat(document.getElementById('minc_'+c.id)?.value)||0})).filter(i=>i.value>0);
-  const totalExp=expBreakdown.reduce((s,e)=>s+e.value,0);
-  const totalInc=incBreakdown.reduce((s,i)=>s+i.value,0);
-  if(!state.history) state.history=[];
-  state.history.push({
-    month:monthKey, income:totalInc, expense:totalExp, net:totalInc-totalExp, netWorth:null,
-    incBreakdown, expBreakdown, acctSnapshot:[], investSnapshot:[],
-  });
-  state.history.sort((a,b)=>b.month.localeCompare(a.month));
-  saveState(); closeModal(); renderAll(); showToast(`${monthKey} 補建完成 ✓`);
-}
 
 // ================================================================
 // ARCHIVE — FIX: 偵測重複結算同一個月份
@@ -1078,16 +1013,10 @@ function confirmArchive(){
   const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
   const incMap=sumByCategory(entries,'income'), expMap=sumByCategory(entries,'expense');
   if(!state.history) state.history=[];
-  const acctSnapshot=state.accounts.map(a=>({name:a.name,value:a.value}));
-  const investSnapshot=state.investments.map(i=>i.type==='etf'
-    ?{name:i.name,ticker:i.ticker,type:'etf',shares:i.shares,currentPrice:i.currentPrice,marketValue:i.shares*i.currentPrice,costPrice:i.costPrice,gain:i.shares*(i.currentPrice-i.costPrice)}
-    :{name:i.name,ticker:i.ticker,type:'crypto',amount:i.amount,avgPrice:i.avgPrice,currentTWD:i.currentTWD,gain:i.currentTWD-(i.avgPrice*i.amount)}
-  );
   state.history.unshift({
     month:monthKey, income:totalInc, expense:totalExp, net:totalInc-totalExp, netWorth:acctTotal+investTWD,
     incBreakdown:state.categories.filter(c=>c.type==='income'&&incMap[c.id]>0).map(c=>({name:c.name,value:incMap[c.id]||0})),
     expBreakdown:state.categories.filter(c=>c.type==='expense'&&expMap[c.id]>0).map(c=>({name:c.name,value:expMap[c.id]||0,color:c.color})),
-    acctSnapshot, investSnapshot,
   });
   saveState(); closeModal(); renderAll(); showToast(`${monthKey} 結算完成 ✓`);
 }
@@ -1118,7 +1047,6 @@ function saveModal(){
   if(currentEditType==='invest_type_select')                              { return; }
   if(currentEditType==='transfer_new')                                    { saveTransferEntry(); return; }
   if(currentEditType==='archive')                                         { confirmArchive(); return; }
-  if(currentEditType==='manualArchive')                                   { confirmManualArchive(); return; }
   if(currentEditType==='journal_new'||currentEditType==='journal_edit')   { saveJournalEntry(); return; }
   if(currentEditType==='account_edit'){
     const a=state.accounts[currentEditIndex];
@@ -1140,7 +1068,7 @@ function saveModal(){
   }
   if(currentEditType==='cat_new'){
     state.categories.push({id:uid(),name:val('f_name'),color:randomColor(),budget:numval('f_budget'),type:val('f_cattype')||'expense'});
-    saveState(); closeModal(); renderBudgetSettings(); renderSummary(); return;
+    saveState(); closeModal(); renderBudgetSettings(); return;
   }
   if(currentEditType==='invest_etf'){
     const inv=state.investments[currentEditIndex];
