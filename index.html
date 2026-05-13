@@ -38,7 +38,11 @@ window._fbSave = function(stateObj) {
   if(!currentUser) return;
   clearTimeout(_fbSaveTimer);
   _fbSaveTimer = setTimeout(async () => {
-    try { await setDoc(doc(db,'users',currentUser.uid), JSON.parse(JSON.stringify(stateObj))); }
+    try {
+      const toSave = JSON.parse(JSON.stringify(stateObj));
+      toSave._updatedAt = Date.now();
+      await setDoc(doc(db,'users',currentUser.uid), toSave);
+    }
     catch(e) { console.warn('雲端儲存失敗',e); }
   }, 1500);
 };
@@ -71,12 +75,24 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('userName').textContent       = user.displayName || user.email;
     const cloud = await window._fbLoad();
     if(cloud) {
-      if(cloud.accounts)    state.accounts    = cloud.accounts;
-      if(cloud.investments) state.investments = cloud.investments;
-      if(cloud.categories)  state.categories  = cloud.categories;
-      if(cloud.journal)     state.journal     = cloud.journal;
-      if(cloud.history)     state.history     = cloud.history;
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+      // 比較時間戳記，用較新的資料
+      let localRaw = null;
+      try { localRaw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e){}
+      const localTs  = localRaw?._updatedAt || 0;
+      const cloudTs  = cloud._updatedAt     || 0;
+      if(cloudTs >= localTs) {
+        // 雲端較新或一樣 → 用雲端
+        if(cloud.accounts)    state.accounts    = cloud.accounts;
+        if(cloud.investments) state.investments = cloud.investments;
+        if(cloud.categories)  state.categories  = cloud.categories;
+        if(cloud.journal)     state.journal     = cloud.journal;
+        if(cloud.history)     state.history     = cloud.history;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({...state, _updatedAt: cloudTs})); } catch(e){}
+      } else {
+        // 本地較新 → 用本地，並立刻推送至雲端
+        console.log('本地資料較新，覆蓋雲端');
+        window._fbSave(state);
+      }
     } else {
       window._fbSave(state);
     }
@@ -459,7 +475,8 @@ function sumByCategory(entries,type){ const m={}; entries.filter(e=>e.type===typ
 function randomColor(){ return ['#ff6b6b','#f5c842','#26de81','#45aaf2','#fd79a8','#a29bfe','#74b9ff','#ff9f43','#00cec9','#00e5a0'][Math.floor(Math.random()*10)]; }
 
 function saveState(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  const toSave = {...state, _updatedAt: Date.now()};
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave)); }catch(e){}
   if(window._fbSave) window._fbSave(state);
   showToast('已儲存 ✓');
 }
@@ -473,6 +490,7 @@ function loadState(){
       if(s.categories)  state.categories  = s.categories;
       if(s.journal)     state.journal     = s.journal;
       if(s.history)     state.history     = s.history;
+      if(s._updatedAt)  state._updatedAt  = s._updatedAt;
     }
   }catch(e){}
 }
@@ -867,10 +885,11 @@ function renderInvestments(){
           </div>
         </div>
         <div class="invest-grid">
-          <div><div class="invest-stat-l">持倉</div><div class="invest-stat-v">${inv.amount} ETH</div></div>
+          <div><div class="invest-stat-l">持倉</div><div class="invest-stat-v">${inv.amount} ${inv.ticker}</div></div>
           <div><div class="invest-stat-l">現值</div><div class="invest-stat-v green">${fmt(inv.currentTWD)}</div></div>
           <div style="grid-column:1/-1"><div class="invest-stat-l">即時單價</div><div class="invest-stat-v" style="font-size:12px;">${liveStr}</div></div>
           <div><div class="invest-stat-l">成交均價</div><div class="invest-stat-v">${inv.avgPrice.toLocaleString()} TWD</div></div>
+          <div><div class="invest-stat-l">持倉成本</div><div class="invest-stat-v">${fmt(calcCost)}</div></div>
           <div><div class="invest-stat-l">預估損益</div><div class="invest-stat-v ${up?'green':'red'}">${up?'+':''}${fmt(gain)}</div></div>
         </div>
         ${ethLastUpdated?`<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:right;">更新 ${updStr}</div>`:''}
