@@ -834,6 +834,10 @@ function renderSummary(){
 // ASSETS
 // ================================================================
 function renderAccounts(){
+  const acctTotal=state.accounts.reduce((s,a)=>s+a.value,0);
+  const investTWD=state.investments.reduce((s,i)=>i.type==='etf'?s+i.shares*i.currentPrice:s+i.currentTWD,0);
+  const grandTotal=acctTotal+investTWD;
+  const isNegTotal=grandTotal<0;
   document.getElementById('accountsList').innerHTML=state.accounts.map((a,i)=>{
     const isNeg=a.value<0;
     return `<div class="list-item">
@@ -846,7 +850,25 @@ function renderAccounts(){
         <button class="edit-btn" onclick="editAccount(${i})">編輯</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('')
+  + `<div style="margin-top:12px;border-top:2px solid var(--border);padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div>
+          <div style="font-size:13px;color:var(--muted);">帳戶現金合計</div>
+        </div>
+        <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--text);">${fmt(acctTotal)}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div>
+          <div style="font-size:13px;color:var(--muted);">投資市值合計</div>
+        </div>
+        <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--blue);">${fmt(investTWD)}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(0,229,160,0.07);border:1px solid rgba(0,229,160,0.2);border-radius:10px;margin-top:4px;">
+        <div style="font-size:13px;font-weight:700;color:var(--accent);">總資產</div>
+        <div style="font-family:'Space Mono',monospace;font-size:17px;font-weight:700;color:${isNegTotal?'var(--red)':'var(--accent)'};">${fmt(grandTotal)}</div>
+      </div>
+    </div>`;
 }
 
 function renderInvestments(){
