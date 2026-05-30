@@ -819,17 +819,44 @@ function renderSummary(){
     ?'<div style="color:var(--muted);font-size:12px;">請至「資產管理」設定各類別預算</div>'
     :budgetCats.map(c=>{
       const spent=expMap[c.id]||0, pct=Math.min((spent/c.budget)*100,100).toFixed(0), over=spent>c.budget;
-      return `<div class="expense-item"><div class="expense-row">
-        <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
-        <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
-          <span style="color:${over?'var(--red)':'var(--muted)'};">${fmt(spent)}</span>
-          <span style="color:var(--muted);">/ ${fmt(c.budget)}</span>
-          ${over?`<span style="color:var(--red);font-size:10px;">超支</span>`:''}
-        </span>
-      </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${over?'var(--red)':c.color};"></div></div></div>`;
+      const txs=entries.filter(e=>e.type==='expense'&&e.categoryId===c.id).sort((a,b)=>b.date.localeCompare(a.date));
+      const txRows=txs.length===0
+        ?`<div style="color:var(--muted);font-size:11px;padding:6px 4px;">本月無支出紀錄</div>`
+        :txs.map(e=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 4px;border-bottom:1px solid var(--border);font-size:12px;">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <span style="color:var(--muted);white-space:nowrap;">${e.date.slice(5)}</span>
+              <span style="color:var(--text);">${e.desc||c.name}</span>
+              ${e.note?`<span style="color:var(--muted);font-size:10px;">📝 ${e.note}</span>`:''}
+            </div>
+            <span style="font-family:'Space Mono',monospace;color:var(--red);white-space:nowrap;margin-left:8px;">-${fmt(e.amount)}</span>
+          </div>`).join('');
+      return `<div class="expense-item" style="cursor:pointer;" onclick="toggleBudgetDetail('bd-${c.id}',this)">
+        <div class="expense-row">
+          <span style="display:flex;align-items:center;gap:6px;font-size:13px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>
+            ${c.name}
+            <span style="font-size:10px;color:var(--muted);transition:transform .2s;" class="bd-chevron-${c.id}">▶</span>
+          </span>
+          <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
+            <span style="color:${over?'var(--red)':'var(--muted)'};">${fmt(spent)}</span>
+            <span style="color:var(--muted);">/ ${fmt(c.budget)}</span>
+            ${over?`<span style="color:var(--red);font-size:10px;">超支</span>`:''}
+          </span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${over?'var(--red)':c.color};"></div></div>
+        <div id="bd-${c.id}" style="display:none;margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">${txRows}</div>
+      </div>`;
     }).join('');
 }
 
+
+function toggleBudgetDetail(id, el){
+  const panel=document.getElementById(id);
+  const chevron=el.querySelector("[class^=\"bd-chevron\"]");
+  const open=panel.style.display==='none';
+  panel.style.display=open?'block':'none';
+  if(chevron) chevron.style.transform=open?'rotate(90deg)':'rotate(0deg)';
+}
 // ================================================================
 // ASSETS
 // ================================================================
