@@ -1225,7 +1225,7 @@ async function fetchETHPrice(){
     // FIX Bug5: ETH 價格更新後同步儲存至 Firebase
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
     if(window._fbSave) window._fbSave(state);
-    renderInvestments(); renderInvestSummary(); renderHero();
+    renderInvestments(); renderInvestSummary(); renderHero(); renderAccounts();
     showToast(`ETH ${ethPriceTWD.toLocaleString()} TWD`);
   }catch(e){ console.warn('ETH 抓取失敗',e); showToast('ETH 價格抓取失敗'); }
   finally{ if(btn){ btn.textContent='↻ ETH'; btn.disabled=false; } }
