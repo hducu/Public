@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>財務儀表板</title>
+<title>積跬</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 
 <!-- ================================================================
@@ -67,7 +67,11 @@ window._fbSignOut = async function() {
 
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
-  document.getElementById('loadingScreen').style.display = 'none';
+  const splash = document.getElementById('loadingScreen');
+  setTimeout(() => {
+    splash.style.opacity = '0';
+    setTimeout(() => { splash.style.display = 'none'; }, 600);
+  }, 1800);
   if(user) {
     document.getElementById('loginScreen').style.display  = 'none';
     document.getElementById('appContent').style.display   = 'block';
@@ -222,6 +226,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 #loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
 .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+@keyframes splashIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
 #loginScreen{display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
 
 /* 重複結算警告 */
@@ -230,17 +235,24 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
 </head>
 <body>
 
-<!-- Loading -->
-<div id="loadingScreen">
-  <div class="spinner"></div>
-  <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:2px;">載入中...</div>
+<!-- Splash Cover -->
+<div id="loadingScreen" style="position:fixed;inset:0;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .6s ease;">
+  <div style="text-align:center;padding:0 40px;animation:splashIn .8s ease forwards;opacity:0;">
+    <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:4px;margin-bottom:24px;">PERSONAL FINANCE</div>
+    <div style="font-size:52px;font-weight:700;color:var(--accent);letter-spacing:8px;margin-bottom:8px;">積跬</div>
+    <div style="width:48px;height:2px;background:var(--accent);margin:0 auto 32px;opacity:.5;"></div>
+    <div style="font-size:13px;color:var(--muted);line-height:2.2;letter-spacing:1px;">
+      不積跬步，無以至千里<br>不積小流，無以成江海
+    </div>
+    <div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:12px;letter-spacing:1px;">— 荀子・勸學</div>
+  </div>
 </div>
 
 <!-- Login -->
 <div id="loginScreen">
   <div style="text-align:center;">
-    <div style="font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);letter-spacing:3px;margin-bottom:8px;">📊 財務儀表板</div>
-    <div style="font-size:28px;font-weight:700;color:var(--green);margin-bottom:6px;">歡迎回來</div>
+    <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:4px;margin-bottom:8px;">PERSONAL FINANCE</div>
+    <div style="font-size:32px;font-weight:700;color:var(--accent);letter-spacing:6px;margin-bottom:6px;">積跬</div>
     <div style="font-size:13px;color:var(--muted);">登入以同步你的財務資料</div>
   </div>
   <button onclick="window._fbSignIn()" style="display:flex;align-items:center;gap:10px;padding:14px 28px;background:white;border:none;border-radius:12px;font-size:15px;font-family:'Noto Sans TC',sans-serif;font-weight:700;color:#333;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
