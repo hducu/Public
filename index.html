@@ -566,6 +566,7 @@ function renderJournal(){
   }
   const groups={};
   entries.forEach(e=>{ (groups[e.date]||(groups[e.date]=[])).push(e); });
+  Object.keys(groups).forEach(d=>groups[d].reverse());
 
   el.innerHTML=Object.keys(groups).sort((a,b)=>b.localeCompare(a)).map(date=>{
     const de=groups[date];
@@ -636,7 +637,7 @@ function buildJournalFields(entry){
   const expCats=state.categories.filter(c=>c.type==='expense');
   const incCats=state.categories.filter(c=>c.type==='income');
   const type=entry?.type||'expense';
-  const today=new Date().toISOString().slice(0,10);
+  const _tn=new Date(); const today=`${_tn.getFullYear()}-${String(_tn.getMonth()+1).padStart(2,'0')}-${String(_tn.getDate()).padStart(2,'0')}`;
   return `
     <div class="radio-row">
       <button class="radio-btn sel-red ${type==='expense'?'selected':''}" id="rb-expense" onclick="selectType('expense')">支出</button>
@@ -729,8 +730,7 @@ function saveJournalEntry(){
 // ================================================================
 function openTransferModal(){
   currentEditType='transfer_new';
-  const today=new Date().toISOString().slice(0,10);
-  const opts=state.accounts.map(a=>`<option value="${a.id}">${a.name} (${fmt(a.value)})</option>`).join('');
+  const _tn=new Date(); const today=`${_tn.getFullYear()}-${String(_tn.getMonth()+1).padStart(2,'0')}-${String(_tn.getDate()).padStart(2,'0')}`;(a=>`<option value="${a.id}">${a.name} (${fmt(a.value)})</option>`).join('');
   openModal('帳戶轉帳',`
     <div style="background:rgba(77,159,255,0.08);border:1px solid rgba(77,159,255,0.25);border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--blue);">
       ⇄ 轉帳不計入收支統計，僅調整帳戶餘額
