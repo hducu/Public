@@ -30,7 +30,7 @@ const auth = getAuth(app);
 const db   = getFirestore(app);
 const provider = new GoogleAuthProvider();
 let currentUser = null;
-let ethInterval = null;
+let ethInterval = null, btcInterval = null;
 
 // 防抖 1.5s
 let _fbSaveTimer = null;
@@ -104,8 +104,12 @@ onAuthStateChanged(auth, async (user) => {
     fetchETHPrice();
     if(ethInterval) clearInterval(ethInterval);
     ethInterval = setInterval(fetchETHPrice, 60000);
+    fetchBTCPrice();
+    if(btcInterval) clearInterval(btcInterval);
+    btcInterval = setInterval(fetchBTCPrice, 60000);
   } else {
     if(ethInterval){ clearInterval(ethInterval); ethInterval=null; }
+    if(btcInterval){ clearInterval(btcInterval); btcInterval=null; }
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appContent').style.display  = 'none';
   }
@@ -377,6 +381,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
           <div class="card-title">投資組合</div>
           <div style="display:flex;gap:6px;align-items:center;">
             <button class="edit-btn" id="ethRefreshBtn" onclick="fetchETHPrice()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);" title="更新 ETH 即時價格">↻ ETH</button>
+            <button class="edit-btn" id="btcRefreshBtn" onclick="fetchBTCPrice()" style="color:#f7931a;border-color:rgba(247,147,26,0.4);" title="更新 BTC 即時價格">↻ BTC</button>
             <button class="edit-btn" onclick="addInvestItem()">＋ 新增</button>
           </div>
         </div>
@@ -476,6 +481,7 @@ let state = {
 const STORAGE_KEY = 'finance_dashboard_v2';
 let currentEditType = null, currentEditIndex = null, journalFilter = 'all';
 let ethPriceTWD = null, ethLastUpdated = null;
+let btcPriceTWD = null, btcLastUpdated = null;
 
 function fmt(n){ return (n<0?'-$':'$') + Math.round(Math.abs(n)).toLocaleString(); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -1243,9 +1249,21 @@ async function fetchETHPrice(){
   finally{ if(btn){ btn.textContent='↻ ETH'; btn.disabled=false; } }
 }
 
-// ================================================================
-// EXPORT / IMPORT
-// ================================================================
+async function fetchBTCPrice(){
+  const btn=document.getElementById('btcRefreshBtn');
+  if(btn){ btn.textContent='⟳ 更新中'; btn.disabled=true; }
+  try{
+    const res=await fetch('https://api.bitopro.com/v3/tickers/btc_twd');
+    const data=await res.json();
+    btcPriceTWD=Math.round(parseFloat(data.data.lastPrice)); btcLastUpdated=new Date();
+    state.investments.forEach(inv=>{ if(inv.type==='crypto'&&inv.ticker==='BTC'){ inv.currentTWD=Math.round(inv.amount*btcPriceTWD); inv.livePrice=btcPriceTWD; } });
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+    if(window._fbSave) window._fbSave(state);
+    renderInvestments(); renderInvestSummary(); renderHero(); renderAccounts();
+    showToast(`BTC ${btcPriceTWD.toLocaleString()} TWD`);
+  }catch(e){ console.warn('BTC 抓取失敗',e); showToast('BTC 價格抓取失敗'); }
+  finally{ if(btn){ btn.textContent='↻ BTC'; btn.disabled=false; } }
+}
 function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
