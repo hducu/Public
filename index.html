@@ -414,7 +414,10 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
       <div style="border-top:1px solid var(--border);padding-top:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <span style="font-size:12px;color:var(--muted);">總成本</span>
-          <span id="sumCost" style="font-family:'Space Mono',monospace;font-size:13px;">$0</span>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span id="sumCost" style="font-family:'Space Mono',monospace;font-size:13px;">$0</span>
+            <button class="edit-btn" onclick="editTotalCost()">編輯</button>
+          </span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:12px;color:var(--muted);">未實現損益</span>
@@ -971,7 +974,7 @@ function renderInvestSummary(){
   const total      = etfTotal+cryptoTotal;
   const etfCost    = state.investments.filter(i=>i.type==='etf').reduce((s,i)=>s+i.shares*i.costPrice,0);
   const cryptoCost = state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+(i.avgPrice*i.amount),0);
-  const totalCost  = etfCost+cryptoCost;
+  const totalCost  = state.manualTotalCost||0;
   const gain       = total-totalCost;
   const up         = gain>=0;
 
@@ -1132,6 +1135,10 @@ function field(label,id,value,type='text'){
 }
 function saveModal(){
   if(currentEditType==='invest_type_select')                              { return; }
+  if(currentEditType==='total_cost'){
+    state.manualTotalCost=parseInt(document.getElementById('f_totalcost').value)||0;
+    saveState(); renderInvestSummary(); closeModal(); return;
+  }
   if(currentEditType==='transfer_new')                                    { saveTransferEntry(); return; }
   if(currentEditType==='archive')                                         { confirmArchive(); return; }
   if(currentEditType==='journal_new'||currentEditType==='journal_edit')   { saveJournalEntry(); return; }
@@ -1270,6 +1277,13 @@ async function fetchBTCPrice(){
     showToast(`BTC ${btcPriceTWD.toLocaleString()} TWD`);
   }catch(e){ console.warn('BTC 抓取失敗',e); showToast('BTC 價格抓取失敗'); }
   finally{ if(btn){ btn.textContent='↻ BTC'; btn.disabled=false; } }
+}
+function editTotalCost(){
+  currentEditType='total_cost';
+  openModal('編輯總成本',`
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">輸入你實際投入的總成本（TWD），不影響其他計算。</div>
+    <div class="form-group"><label>總成本 (TWD)</label><input type="number" id="f_totalcost" value="${state.manualTotalCost||0}"></div>
+  `);
 }
 function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
