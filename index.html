@@ -249,7 +249,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
     <div style="font-size:52px;font-weight:700;color:var(--accent);letter-spacing:8px;margin-bottom:8px;">積跬</div>
     <div style="width:48px;height:2px;background:var(--accent);margin:0 auto 32px;opacity:.5;"></div>
     <div style="font-size:13px;color:var(--muted);line-height:2.2;letter-spacing:1px;">
-      不積跬步 無以至千里<br>不積小流 無以成江海
+      不積跬步，無以至千里<br>不積小流，無以成江海
     </div>
     <div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:12px;letter-spacing:1px;">— 荀子・勸學</div>
   </div>
@@ -970,7 +970,7 @@ function renderInvestSummary(){
   const cryptoTotal= state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+i.currentTWD,0);
   const total      = etfTotal+cryptoTotal;
   const etfCost    = state.investments.filter(i=>i.type==='etf').reduce((s,i)=>s+i.shares*i.costPrice,0);
-  const cryptoCost = state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+(i.avgPrice*i.amount),0);
+  const cryptoCost = state.investments.filter(i=>i.type==='crypto').reduce((s,i)=>s+(i.investedTWD||0),0);
   const totalCost  = etfCost+cryptoCost;
   const gain       = total-totalCost;
   const up         = gain>=0;
@@ -1166,7 +1166,7 @@ function saveModal(){
   if(currentEditType==='invest_crypto'){
     const inv=state.investments[currentEditIndex];
     inv.name=val('f_name'); inv.ticker=val('f_ticker'); inv.amount=parseFloat(val('f_amount'))||0;
-    inv.costTWD=numval('f_cost'); inv.currentTWD=numval('f_current'); inv.avgPrice=numval('f_avg');
+    inv.investedTWD=numval('f_invested'); inv.currentTWD=numval('f_current'); inv.avgPrice=numval('f_avg');
     saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); return;
   }
   if(currentEditType==='invest_new_etf'){
@@ -1174,7 +1174,7 @@ function saveModal(){
     saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); return;
   }
   if(currentEditType==='invest_new_crypto'){
-    state.investments.push({name:val('f_name'),ticker:val('f_ticker'),type:'crypto',amount:parseFloat(val('f_amount'))||0,costTWD:numval('f_cost'),currentTWD:numval('f_current'),avgPrice:numval('f_avg')});
+    state.investments.push({name:val('f_name'),ticker:val('f_ticker'),type:'crypto',amount:parseFloat(val('f_amount'))||0,investedTWD:numval('f_invested'),currentTWD:numval('f_current'),avgPrice:numval('f_avg')});
     saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); return;
   }
 }
@@ -1226,13 +1226,13 @@ function selectInvestType(type){
   } else {
     currentEditType='invest_new_crypto';
     document.getElementById('modalTitle').textContent='新增虛擬貨幣';
-    document.getElementById('modalFields').innerHTML=field('名稱','f_name','')+field('代碼','f_ticker','')+field('持倉數量','f_amount',0)+field('成本 (TWD)','f_cost',0,'number')+field('現值 (TWD)','f_current',0,'number')+field('成交均價 (TWD)','f_avg',0,'number');
+    document.getElementById('modalFields').innerHTML=field('名稱','f_name','')+field('代碼','f_ticker','')+field('持倉數量','f_amount',0)+field('實際投入 (TWD)','f_invested',0,'number')+field('現值 (TWD)','f_current',0,'number')+field('成交均價 (TWD)','f_avg',0,'number');
   }
 }
 function editInvestItem(i){
   const inv=state.investments[i];
   if(inv.type==='etf'){ currentEditType='invest_etf'; currentEditIndex=i; openModal('編輯 ETF',field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持股數量','f_shares',inv.shares,'number')+field('成本均價','f_cost',inv.costPrice,'number')+field('現價','f_price',inv.currentPrice,'number')+field('損益兩平價','f_breakeven',inv.breakeven,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`); }
-  else { currentEditType='invest_crypto'; currentEditIndex=i; openModal('編輯虛擬貨幣',field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持倉數量','f_amount',inv.amount)+field('成本 (TWD)','f_cost',inv.costTWD,'number')+field('現值 (TWD)','f_current',inv.currentTWD,'number')+field('成交均價 (TWD)','f_avg',inv.avgPrice,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`); }
+  else { currentEditType='invest_crypto'; currentEditIndex=i; openModal('編輯虛擬貨幣',field('名稱','f_name',inv.name)+field('代碼','f_ticker',inv.ticker)+field('持倉數量','f_amount',inv.amount)+field('實際投入 (TWD)','f_invested',inv.investedTWD||inv.costTWD||0,'number')+field('現值 (TWD)','f_current',inv.currentTWD,'number')+field('成交均價 (TWD)','f_avg',inv.avgPrice,'number')+`<button class="btn btn-danger" style="width:100%;margin-top:8px;" onclick="deleteInvest(${i})">刪除</button>`); }
 }
 function deleteInvest(i){ if(!confirm('確定刪除？')) return; state.investments.splice(i,1); saveState(); closeModal(); renderInvestments(); renderInvestSummary(); renderHero(); }
 
