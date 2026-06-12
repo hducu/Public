@@ -95,6 +95,7 @@ onAuthStateChanged(auth, async (user) => {
         if(cloud.journal)          state.journal          = cloud.journal;
         if(cloud.history)          state.history          = cloud.history;
         if(cloud.manualTotalCost)  state.manualTotalCost  = cloud.manualTotalCost;
+        if(cloud.investCosts)      state.investCosts      = cloud.investCosts;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify({...state, _updatedAt: cloudTs})); } catch(e){}
       } else {
         // 本地較新 → 用本地，並立刻推送至雲端
@@ -517,6 +518,7 @@ function loadState(){
       if(s.history)          state.history          = s.history;
       if(s._updatedAt)       state._updatedAt       = s._updatedAt;
       if(s.manualTotalCost)  state.manualTotalCost  = s.manualTotalCost;
+      if(s.investCosts)      state.investCosts      = s.investCosts;
     }
   }catch(e){}
 }
@@ -1136,7 +1138,15 @@ function field(label,id,value,type='text'){
 function saveModal(){
   if(currentEditType==='invest_type_select')                              { return; }
   if(currentEditType==='total_cost'){
-    state.manualTotalCost=parseInt(document.getElementById('f_totalcost').value)||0;
+    if(!state.investCosts) state.investCosts={};
+    let total=0;
+    state.investments.forEach((inv,i)=>{
+      const key=inv.ticker||inv.name;
+      const v=parseFloat(document.getElementById('fc_'+i)?.value)||0;
+      state.investCosts[key]=v;
+      total+=v;
+    });
+    state.manualTotalCost=Math.round(total);
     saveState(); renderInvestSummary(); closeModal(); return;
   }
   if(currentEditType==='transfer_new')                                    { saveTransferEntry(); return; }
@@ -1280,10 +1290,38 @@ async function fetchBTCPrice(){
 }
 function editTotalCost(){
   currentEditType='total_cost';
-  openModal('編輯總成本',`
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">輸入你實際投入的總成本（TWD），不影響其他計算。</div>
-    <div class="form-group"><label>總成本 (TWD)</label><input type="number" id="f_totalcost" value="${state.manualTotalCost||0}"></div>
+  if(!state.investCosts) state.investCosts={};
+  const rows=state.investments.map((inv,i)=>{
+    const key=inv.ticker||inv.name;
+    const val=state.investCosts[key]||0;
+    return `<div class="form-group" style="margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:6px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${inv.type==='etf'?'var(--green)':'var(--yellow)'};display:inline-block;"></span>
+        ${inv.name} <span style="color:var(--muted);font-size:10px;font-family:'Space Mono',monospace;">${inv.ticker}</span>
+      </label>
+      <input type="number" id="fc_${i}" value="${val}" oninput="updateCostTotal()" placeholder="0" min="0">
+    </div>`;
+  }).join('');
+  const currentTotal=(state.manualTotalCost||0);
+  openModal('編輯各項投資成本',`
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">填入每項投資的實際投入成本（TWD），系統自動加總。</div>
+    ${rows}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(0,229,160,0.07);border:1px solid rgba(0,229,160,0.2);border-radius:10px;margin-top:4px;">
+      <span style="font-size:13px;color:var(--accent);">總成本合計</span>
+      <span id="costTotalPreview" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--accent);">$${currentTotal.toLocaleString()}</span>
+    </div>
   `);
+  // 初始化預覽
+  setTimeout(updateCostTotal, 0);
+}
+
+function updateCostTotal(){
+  const total=state.investments.reduce((s,inv,i)=>{
+    const v=parseFloat(document.getElementById('fc_'+i)?.value)||0;
+    return s+v;
+  },0);
+  const el=document.getElementById('costTotalPreview');
+  if(el) el.textContent='$'+Math.round(total).toLocaleString();
 }
 function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
@@ -1306,6 +1344,7 @@ function importData(){
           if(p.journal     && Array.isArray(p.journal))     state.journal     = p.journal;
           if(p.history     && Array.isArray(p.history))     state.history     = p.history;
           if(p.manualTotalCost)                             state.manualTotalCost = p.manualTotalCost;
+          if(p.investCosts)                                 state.investCosts     = p.investCosts;
           saveState(); renderAll(); showToast('匯入成功 ✓');
         } else if(p.accounts || p.investments || p.history){
           if(p.accounts    && Array.isArray(p.accounts))    state.accounts    = p.accounts.map(a=>({...a,id:a.id||uid()}));
