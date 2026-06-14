@@ -1162,6 +1162,7 @@ function saveModal(){
     });
     saveState(); renderRealized(); closeModal(); return;
   }
+  if(currentEditType==='total_cost'){
     if(!state.investCosts) state.investCosts={};
     let total=0;
     state.investments.forEach((inv,i)=>{
