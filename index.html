@@ -96,6 +96,7 @@ onAuthStateChanged(auth, async (user) => {
         if(cloud.history)          state.history          = cloud.history;
         if(cloud.manualTotalCost)  state.manualTotalCost  = cloud.manualTotalCost;
         if(cloud.investCosts)      state.investCosts      = cloud.investCosts;
+        if(cloud.realizedGains)    state.realizedGains    = cloud.realizedGains;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify({...state, _updatedAt: cloudTs})); } catch(e){}
       } else {
         // 本地較新 → 用本地，並立刻推送至雲端
@@ -425,6 +426,18 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
           <span style="font-size:12px;color:var(--muted);">未實現損益</span>
           <span id="sumGain" style="font-family:'Space Mono',monospace;font-size:15px;font-weight:700;">$0</span>
         </div>
+        <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleRealizedPanel()">
+            <span style="font-size:12px;color:var(--muted);">實現損益 <span id="realizedChevron" style="font-size:10px;transition:transform .2s;display:inline-block;">▶</span></span>
+            <span style="display:flex;align-items:center;gap:6px;">
+              <span id="sumRealized" style="font-family:'Space Mono',monospace;font-size:15px;font-weight:700;">$0</span>
+              <button class="edit-btn" onclick="event.stopPropagation();addRealizedGain()">＋</button>
+            </span>
+          </div>
+          <div id="realizedPanel" style="display:none;margin-top:8px;" id="realizedPanel">
+            <div id="realizedList"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -519,6 +532,7 @@ function loadState(){
       if(s._updatedAt)       state._updatedAt       = s._updatedAt;
       if(s.manualTotalCost)  state.manualTotalCost  = s.manualTotalCost;
       if(s.investCosts)      state.investCosts      = s.investCosts;
+      if(s.realizedGains)    state.realizedGains    = s.realizedGains;
     }
   }catch(e){}
 }
@@ -538,7 +552,7 @@ function renderAll(){
   const mfEl=document.getElementById('filterMonth');
   if(dateEl) dateEl.textContent=`${now.getFullYear()} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
   if(mfEl && !mfEl.value) mfEl.value=mk;
-  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderBudgetSettings(); renderHistory();
+  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderRealized(); renderBudgetSettings(); renderHistory();
 }
 
 function renderHero(){
@@ -1137,7 +1151,17 @@ function field(label,id,value,type='text'){
 }
 function saveModal(){
   if(currentEditType==='invest_type_select')                              { return; }
-  if(currentEditType==='total_cost'){
+  if(currentEditType==='realized_gain_new'){
+    if(!state.realizedGains) state.realizedGains=[];
+    const amount=parseFloat(document.getElementById('f_ramount').value);
+    if(isNaN(amount)){ showToast('請填入金額'); return; }
+    state.realizedGains.push({
+      date: document.getElementById('f_rdate').value,
+      desc: document.getElementById('f_rdesc').value.trim(),
+      amount: amount
+    });
+    saveState(); renderRealized(); closeModal(); return;
+  }
     if(!state.investCosts) state.investCosts={};
     let total=0;
     state.investments.forEach((inv,i)=>{
@@ -1323,7 +1347,61 @@ function updateCostTotal(){
   const el=document.getElementById('costTotalPreview');
   if(el) el.textContent='$'+Math.round(total).toLocaleString();
 }
-function exportData(){
+function renderRealized(){
+  if(!state.realizedGains) state.realizedGains=[];
+  const total=state.realizedGains.reduce((s,r)=>s+r.amount,0);
+  const up=total>=0;
+  const sr=document.getElementById('sumRealized');
+  if(sr){ sr.textContent=(up?'+':'-')+'$'+Math.round(Math.abs(total)).toLocaleString(); sr.style.color=up?'var(--green)':'var(--red)'; }
+  const list=document.getElementById('realizedList');
+  if(!list) return;
+  if(state.realizedGains.length===0){
+    list.innerHTML=`<div style="color:var(--muted);font-size:11px;padding:6px 0;">尚無紀錄</div>`;
+    return;
+  }
+  list.innerHTML=state.realizedGains.slice().sort((a,b)=>b.date.localeCompare(a.date)).map((r,i)=>{
+    const up=r.amount>=0;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px;">
+      <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:0;">
+        <span style="color:var(--muted);white-space:nowrap;">${r.date.slice(5)}</span>
+        <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.desc||'—'}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
+        <span style="font-family:'Space Mono',monospace;color:${up?'var(--green)':'var(--red)'};white-space:nowrap;">${up?'+':''}${up?'$'+Math.round(r.amount).toLocaleString():'-$'+Math.round(Math.abs(r.amount)).toLocaleString()}</span>
+        <button class="edit-btn" style="color:var(--red);border-color:rgba(255,99,99,0.3);" onclick="deleteRealizedGain(${i})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleRealizedPanel(){
+  const panel=document.getElementById('realizedPanel');
+  const chevron=document.getElementById('realizedChevron');
+  const open=panel.style.display==='none';
+  panel.style.display=open?'block':'none';
+  if(chevron) chevron.style.transform=open?'rotate(90deg)':'rotate(0deg)';
+}
+
+function addRealizedGain(){
+  currentEditType='realized_gain_new';
+  const _tn=new Date(); const today=`${_tn.getFullYear()}-${String(_tn.getMonth()+1).padStart(2,'0')}-${String(_tn.getDate()).padStart(2,'0')}`;
+  openModal('新增實現損益',`
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">此紀錄僅供參考，不影響帳戶餘額或任何統計。</div>
+    <div class="form-group"><label>日期</label><input type="date" id="f_rdate" value="${today}"></div>
+    <div class="form-group"><label>描述</label><input type="text" id="f_rdesc" placeholder="例：ETH 獲利了結"></div>
+    <div class="form-group"><label>金額（虧損請填負數）</label><input type="number" id="f_ramount" placeholder="0"></div>
+  `);
+}
+
+function deleteRealizedGain(i){
+  if(!confirm('確定刪除這筆紀錄？')) return;
+  state.realizedGains.splice(i,1);
+  saveState(); renderRealized();
+}
+
+// ================================================================
+// EXPORT / IMPORT
+// ================================================================
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=`finance_backup_${new Date().toISOString().slice(0,10)}.json`; a.click();
@@ -1345,6 +1423,7 @@ function importData(){
           if(p.history     && Array.isArray(p.history))     state.history     = p.history;
           if(p.manualTotalCost)                             state.manualTotalCost = p.manualTotalCost;
           if(p.investCosts)                                 state.investCosts     = p.investCosts;
+          if(p.realizedGains && Array.isArray(p.realizedGains)) state.realizedGains = p.realizedGains;
           saveState(); renderAll(); showToast('匯入成功 ✓');
         } else if(p.accounts || p.investments || p.history){
           if(p.accounts    && Array.isArray(p.accounts))    state.accounts    = p.accounts.map(a=>({...a,id:a.id||uid()}));
