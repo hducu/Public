@@ -840,21 +840,42 @@ function renderSummary(){
   document.getElementById('realIncTotal').textContent=fmt(totalInc);
   document.getElementById('realExpTotal').textContent=fmt(totalExp);
 
-  const renderBar=(cats,map,total,colorClass)=>cats.filter(c=>map[c.id]>0).map(c=>{
+  const renderBar=(cats,map,total,colorClass,type)=>cats.filter(c=>map[c.id]>0).map(c=>{
     const v=map[c.id]||0, pct=total>0?((v/total)*100).toFixed(1):0;
-    return `<div class="expense-item"><div class="expense-row">
-      <span style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>${c.name}</span>
-      <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
-        <span style="color:var(--muted);">${pct}%</span>
-        <span class="${colorClass}">${fmt(v)}</span>
-      </span>
-    </div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div></div>`;
+    const txs=entries.filter(e=>e.type===type&&e.categoryId===c.id).sort((a,b)=>b.date.localeCompare(a.date));
+    const sign=type==='expense'?'-':'+';
+    const colorVar=type==='expense'?'var(--red)':'var(--green)';
+    const txRows=txs.length===0
+      ?`<div style="color:var(--muted);font-size:11px;padding:6px 4px;">本月無紀錄</div>`
+      :txs.map(e=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 4px;border-bottom:1px solid var(--border);font-size:12px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="color:var(--muted);white-space:nowrap;">${e.date.slice(5)}</span>
+            <span style="color:var(--text);">${e.desc||c.name}</span>
+            ${e.note?`<span style="color:var(--muted);font-size:10px;">📝 ${e.note}</span>`:''}
+          </div>
+          <span style="font-family:'Space Mono',monospace;color:${colorVar};white-space:nowrap;margin-left:8px;">${sign}${fmt(e.amount)}</span>
+        </div>`).join('');
+    return `<div class="expense-item" style="cursor:pointer;" onclick="toggleBudgetDetail('sd-${type}-${c.id}',this)">
+      <div class="expense-row">
+        <span style="display:flex;align-items:center;gap:6px;font-size:13px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${c.color};display:inline-block;"></span>
+          ${c.name}
+          <span style="font-size:10px;color:var(--muted);transition:transform .2s;" class="bd-chevron-${type}-${c.id}">▶</span>
+        </span>
+        <span style="font-family:'Space Mono',monospace;font-size:12px;display:flex;align-items:center;gap:6px;">
+          <span style="color:var(--muted);">${pct}%</span>
+          <span class="${colorClass}">${fmt(v)}</span>
+        </span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c.color};"></div></div>
+      <div id="sd-${type}-${c.id}" style="display:none;margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">${txRows}</div>
+    </div>`;
   }).join('');
 
   const incCats=state.categories.filter(c=>c.type==='income');
   const expCats=state.categories.filter(c=>c.type==='expense');
-  const incRows=renderBar(incCats,incMap,totalInc,'green');
-  const expRows=renderBar(expCats,expMap,totalExp,'red');
+  const incRows=renderBar(incCats,incMap,totalInc,'green','income');
+  const expRows=renderBar(expCats,expMap,totalExp,'red','expense');
   document.getElementById('realIncList').innerHTML=incRows||'<div style="color:var(--muted);font-size:12px;">本月尚無收入紀錄</div>';
   document.getElementById('realExpList').innerHTML=expRows||'<div style="color:var(--muted);font-size:12px;">本月尚無支出紀錄</div>';
 
