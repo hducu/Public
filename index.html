@@ -97,6 +97,7 @@ onAuthStateChanged(auth, async (user) => {
         if(cloud.manualTotalCost)  state.manualTotalCost  = cloud.manualTotalCost;
         if(cloud.investCosts)      state.investCosts      = cloud.investCosts;
         if(cloud.realizedGains)    state.realizedGains    = cloud.realizedGains;
+        if(cloud.costEntries)      state.costEntries      = cloud.costEntries;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify({...state, _updatedAt: cloudTs})); } catch(e){}
       } else {
         // 本地較新 → 用本地，並立刻推送至雲端
@@ -415,14 +416,17 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
         </div>
       </div>
       <div style="border-top:1px solid var(--border);padding-top:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-size:12px;color:var(--muted);">總成本</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleCostPanel()">
+          <span style="font-size:12px;color:var(--muted);">總成本 <span id="costChevron" style="font-size:10px;transition:transform .2s;display:inline-block;">▶</span></span>
           <span style="display:flex;align-items:center;gap:6px;">
             <span id="sumCost" style="font-family:'Space Mono',monospace;font-size:13px;">$0</span>
-            <button class="edit-btn" onclick="editTotalCost()">編輯</button>
+            <button class="edit-btn" onclick="event.stopPropagation();addCostEntry()">＋</button>
           </span>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div id="costPanel" style="display:none;margin-top:8px;">
+          <div id="costList"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
           <span style="font-size:12px;color:var(--muted);">未實現損益</span>
           <span id="sumGain" style="font-family:'Space Mono',monospace;font-size:15px;font-weight:700;">$0</span>
         </div>
@@ -434,7 +438,7 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
               <button class="edit-btn" onclick="event.stopPropagation();addRealizedGain()">＋</button>
             </span>
           </div>
-          <div id="realizedPanel" style="display:none;margin-top:8px;" id="realizedPanel">
+          <div id="realizedPanel" style="display:none;margin-top:8px;">
             <div id="realizedList"></div>
           </div>
         </div>
@@ -533,6 +537,7 @@ function loadState(){
       if(s.manualTotalCost)  state.manualTotalCost  = s.manualTotalCost;
       if(s.investCosts)      state.investCosts      = s.investCosts;
       if(s.realizedGains)    state.realizedGains    = s.realizedGains;
+      if(s.costEntries)      state.costEntries      = s.costEntries;
     }
   }catch(e){}
 }
@@ -552,7 +557,7 @@ function renderAll(){
   const mfEl=document.getElementById('filterMonth');
   if(dateEl) dateEl.textContent=`${now.getFullYear()} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
   if(mfEl && !mfEl.value) mfEl.value=mk;
-  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderRealized(); renderBudgetSettings(); renderHistory();
+  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderRealized(); renderCostEntries(); renderBudgetSettings(); renderHistory();
 }
 
 function renderHero(){
@@ -958,13 +963,17 @@ function renderAccounts(){
 }
 
 function renderInvestments(){
+  const totalMV=state.investments.reduce((s,inv)=>s+(inv.type==='etf'?inv.shares*inv.currentPrice:inv.currentTWD),0);
   document.getElementById('investList').innerHTML=state.investments.map((inv,i)=>{
     if(inv.type==='etf'){
       const gain=inv.shares*(inv.currentPrice-inv.costPrice), gainPct=((inv.currentPrice-inv.costPrice)/inv.costPrice*100).toFixed(2), up=gain>=0;
+      const mv=inv.shares*inv.currentPrice;
+      const sharePct=totalMV>0?((mv/totalMV)*100).toFixed(1):'0.0';
       return `<div class="invest-card">
         <div class="invest-top">
           <div><div class="invest-name">${inv.name}</div><div class="invest-ticker">${inv.ticker}</div></div>
           <div style="display:flex;gap:6px;align-items:center;">
+            <span class="invest-badge" style="background:rgba(77,159,255,0.12);color:var(--blue);">${sharePct}%</span>
             <span class="invest-badge ${up?'badge-up':'badge-down'}">${up?'+':''}${gainPct}%</span>
             <button class="edit-btn" onclick="editInvestItem(${i})">編輯</button>
           </div>
@@ -975,11 +984,12 @@ function renderInvestments(){
           <div><div class="invest-stat-l">成本均價</div><div class="invest-stat-v">${inv.costPrice}</div></div>
           <div><div class="invest-stat-l">預估損益</div><div class="invest-stat-v ${up?'green':'red'}">${up?'+':''}${fmt(gain)}</div></div>
           <div><div class="invest-stat-l">損益兩平</div><div class="invest-stat-v">${inv.breakeven}</div></div>
-          <div><div class="invest-stat-l">市值</div><div class="invest-stat-v green">${fmt(inv.shares*inv.currentPrice)}</div></div>
+          <div><div class="invest-stat-l">市值</div><div class="invest-stat-v green">${fmt(mv)}</div></div>
         </div>
       </div>`;
     } else {
       const calcCost=inv.avgPrice*inv.amount, gain=inv.currentTWD-calcCost, gainPct=(calcCost>0?((gain/calcCost)*100):0).toFixed(2), up=gain>=0;
+      const sharePct=totalMV>0?((inv.currentTWD/totalMV)*100).toFixed(1):'0.0';
       const liveStr=inv.livePrice
         ?`<span style="color:var(--green);font-size:10px;">● 即時</span> $${inv.livePrice.toLocaleString()} TWD/${inv.ticker}`
         :`${inv.avgPrice.toLocaleString()} TWD（手動）`;
@@ -989,6 +999,7 @@ function renderInvestments(){
         <div class="invest-top">
           <div><div class="invest-name">${inv.name}</div><div class="invest-ticker">${inv.ticker}</div></div>
           <div style="display:flex;gap:6px;align-items:center;">
+            <span class="invest-badge" style="background:rgba(77,159,255,0.12);color:var(--blue);">${sharePct}%</span>
             <span class="invest-badge ${up?'badge-up':'badge-down'}">${up?'+':''}${gainPct}%</span>
             <button class="edit-btn" onclick="editInvestItem(${i})">編輯</button>
           </div>
@@ -1177,23 +1188,24 @@ function saveModal(){
     const amount=parseFloat(document.getElementById('f_ramount').value);
     if(isNaN(amount)){ showToast('請填入金額'); return; }
     state.realizedGains.push({
+      id: uid(),
       date: document.getElementById('f_rdate').value,
       desc: document.getElementById('f_rdesc').value.trim(),
       amount: amount
     });
     saveState(); renderRealized(); closeModal(); return;
   }
-  if(currentEditType==='total_cost'){
-    if(!state.investCosts) state.investCosts={};
-    let total=0;
-    state.investments.forEach((inv,i)=>{
-      const key=inv.ticker||inv.name;
-      const v=parseFloat(document.getElementById('fc_'+i)?.value)||0;
-      state.investCosts[key]=v;
-      total+=v;
+  if(currentEditType==='cost_entry_new'){
+    if(!state.costEntries) state.costEntries=[];
+    const amount=parseFloat(document.getElementById('f_camount').value);
+    if(isNaN(amount)){ showToast('請填入金額'); return; }
+    state.costEntries.push({
+      id: uid(),
+      date: document.getElementById('f_cdate').value,
+      desc: document.getElementById('f_cdesc').value.trim(),
+      amount: amount
     });
-    state.manualTotalCost=Math.round(total);
-    saveState(); renderInvestSummary(); closeModal(); return;
+    saveState(); renderCostEntries(); closeModal(); return;
   }
   if(currentEditType==='transfer_new')                                    { saveTransferEntry(); return; }
   if(currentEditType==='archive')                                         { confirmArchive(); return; }
@@ -1334,43 +1346,61 @@ async function fetchBTCPrice(){
   }catch(e){ console.warn('BTC 抓取失敗',e); showToast('BTC 價格抓取失敗'); }
   finally{ if(btn){ btn.textContent='↻ BTC'; btn.disabled=false; } }
 }
-function editTotalCost(){
-  currentEditType='total_cost';
-  if(!state.investCosts) state.investCosts={};
-  const rows=state.investments.map((inv,i)=>{
-    const key=inv.ticker||inv.name;
-    const val=state.investCosts[key]||0;
-    return `<div class="form-group" style="margin-bottom:10px;">
-      <label style="display:flex;align-items:center;gap:6px;">
-        <span style="width:8px;height:8px;border-radius:50%;background:${inv.type==='etf'?'var(--green)':'var(--yellow)'};display:inline-block;"></span>
-        ${inv.name} <span style="color:var(--muted);font-size:10px;font-family:'Space Mono',monospace;">${inv.ticker}</span>
-      </label>
-      <input type="number" id="fc_${i}" value="${val}" oninput="updateCostTotal()" placeholder="0" min="0">
-    </div>`;
-  }).join('');
-  const currentTotal=(state.manualTotalCost||0);
-  openModal('編輯各項投資成本',`
-    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">填入每項投資的實際投入成本（TWD），系統自動加總。</div>
-    ${rows}
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(0,229,160,0.07);border:1px solid rgba(0,229,160,0.2);border-radius:10px;margin-top:4px;">
-      <span style="font-size:13px;color:var(--accent);">總成本合計</span>
-      <span id="costTotalPreview" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--accent);">$${currentTotal.toLocaleString()}</span>
-    </div>
-  `);
-  // 初始化預覽
-  setTimeout(updateCostTotal, 0);
+function renderCostEntries(){
+  if(!state.costEntries) state.costEntries=[];
+  state.costEntries.forEach(c=>{ if(!c.id) c.id=uid(); });
+  const total=state.costEntries.reduce((s,c)=>s+c.amount,0);
+  state.manualTotalCost=total;
+  const sco=document.getElementById('sumCost');
+  if(sco) sco.textContent=fmt(total);
+  const list=document.getElementById('costList');
+  if(!list) return;
+  if(state.costEntries.length===0){
+    list.innerHTML=`<div style="color:var(--muted);font-size:11px;padding:6px 0;">尚無紀錄</div>`;
+  } else {
+    list.innerHTML=state.costEntries.slice().sort((a,b)=>b.date.localeCompare(a.date)).map((c)=>{
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px;">
+        <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:0;">
+          <span style="color:var(--muted);white-space:nowrap;">${c.date.slice(5)}</span>
+          <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.desc||'—'}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
+          <span style="font-family:'Space Mono',monospace;color:var(--text);white-space:nowrap;">${fmt(c.amount)}</span>
+          <button class="edit-btn" style="color:var(--red);border-color:rgba(255,99,99,0.3);" onclick="deleteCostEntry('${c.id}')">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  renderInvestSummary();
 }
 
-function updateCostTotal(){
-  const total=state.investments.reduce((s,inv,i)=>{
-    const v=parseFloat(document.getElementById('fc_'+i)?.value)||0;
-    return s+v;
-  },0);
-  const el=document.getElementById('costTotalPreview');
-  if(el) el.textContent='$'+Math.round(total).toLocaleString();
+function toggleCostPanel(){
+  const panel=document.getElementById('costPanel');
+  const chevron=document.getElementById('costChevron');
+  const open=panel.style.display==='none';
+  panel.style.display=open?'block':'none';
+  if(chevron) chevron.style.transform=open?'rotate(90deg)':'rotate(0deg)';
+}
+
+function addCostEntry(){
+  currentEditType='cost_entry_new';
+  const _tn=new Date(); const today=`${_tn.getFullYear()}-${String(_tn.getMonth()+1).padStart(2,'0')}-${String(_tn.getDate()).padStart(2,'0')}`;
+  openModal('新增成本紀錄',`
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">記錄一筆實際投入成本，系統會自動加總成總成本。</div>
+    <div class="form-group"><label>日期</label><input type="date" id="f_cdate" value="${today}"></div>
+    <div class="form-group"><label>描述</label><input type="text" id="f_cdesc" placeholder="例：買入 00646"></div>
+    <div class="form-group"><label>金額 (TWD)</label><input type="number" id="f_camount" placeholder="0"></div>
+  `);
+}
+
+function deleteCostEntry(id){
+  if(!confirm('確定刪除這筆紀錄？')) return;
+  state.costEntries=state.costEntries.filter(c=>c.id!==id);
+  saveState(); renderCostEntries();
 }
 function renderRealized(){
   if(!state.realizedGains) state.realizedGains=[];
+  state.realizedGains.forEach(r=>{ if(!r.id) r.id=uid(); });
   const total=state.realizedGains.reduce((s,r)=>s+r.amount,0);
   const up=total>=0;
   const sr=document.getElementById('sumRealized');
@@ -1381,7 +1411,7 @@ function renderRealized(){
     list.innerHTML=`<div style="color:var(--muted);font-size:11px;padding:6px 0;">尚無紀錄</div>`;
     return;
   }
-  list.innerHTML=state.realizedGains.slice().sort((a,b)=>b.date.localeCompare(a.date)).map((r,i)=>{
+  list.innerHTML=state.realizedGains.slice().sort((a,b)=>b.date.localeCompare(a.date)).map((r)=>{
     const up=r.amount>=0;
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px;">
       <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:0;">
@@ -1390,7 +1420,7 @@ function renderRealized(){
       </div>
       <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
         <span style="font-family:'Space Mono',monospace;color:${up?'var(--green)':'var(--red)'};white-space:nowrap;">${up?'+':''}${up?'$'+Math.round(r.amount).toLocaleString():'-$'+Math.round(Math.abs(r.amount)).toLocaleString()}</span>
-        <button class="edit-btn" style="color:var(--red);border-color:rgba(255,99,99,0.3);" onclick="deleteRealizedGain(${i})">✕</button>
+        <button class="edit-btn" style="color:var(--red);border-color:rgba(255,99,99,0.3);" onclick="deleteRealizedGain('${r.id}')">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -1415,9 +1445,9 @@ function addRealizedGain(){
   `);
 }
 
-function deleteRealizedGain(i){
+function deleteRealizedGain(id){
   if(!confirm('確定刪除這筆紀錄？')) return;
-  state.realizedGains.splice(i,1);
+  state.realizedGains=state.realizedGains.filter(r=>r.id!==id);
   saveState(); renderRealized();
 }
 
@@ -1447,6 +1477,7 @@ function importData(){
           if(p.manualTotalCost)                             state.manualTotalCost = p.manualTotalCost;
           if(p.investCosts)                                 state.investCosts     = p.investCosts;
           if(p.realizedGains && Array.isArray(p.realizedGains)) state.realizedGains = p.realizedGains;
+          if(p.costEntries && Array.isArray(p.costEntries)) state.costEntries = p.costEntries;
           saveState(); renderAll(); showToast('匯入成功 ✓');
         } else if(p.accounts || p.investments || p.history){
           if(p.accounts    && Array.isArray(p.accounts))    state.accounts    = p.accounts.map(a=>({...a,id:a.id||uid()}));
