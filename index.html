@@ -458,6 +458,15 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
   <div class="tab-panel" id="tab-history">
     <div class="card">
       <div class="section-header">
+        <div class="card-title">總資產走勢</div>
+      </div>
+      <div style="position:relative;width:100%;height:180px;">
+        <canvas id="assetChart" style="width:100%;height:180px;"></canvas>
+        <div id="assetChartEmpty" style="display:none;color:var(--muted);font-size:12px;text-align:center;padding:60px 0;">存檔紀錄不足，無法顯示走勢</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-header">
         <div class="card-title">歷史收支存檔</div>
         <button class="edit-btn" onclick="archiveMonth()" style="color:var(--yellow);border-color:rgba(245,200,66,0.4);">⌛ 月底結算</button>
       </div>
@@ -557,7 +566,7 @@ function renderAll(){
   const mfEl=document.getElementById('filterMonth');
   if(dateEl) dateEl.textContent=`${now.getFullYear()} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
   if(mfEl && !mfEl.value) mfEl.value=mk;
-  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderRealized(); renderCostEntries(); renderBudgetSettings(); renderHistory();
+  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderRealized(); renderCostEntries(); renderBudgetSettings(); renderHistory(); renderAssetChart();
 }
 
 function renderHero(){
@@ -590,6 +599,7 @@ function switchTab(name){
   });
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
+  if(name==='history') setTimeout(renderAssetChart,50);
 }
 
 function setFilter(f){
@@ -1094,8 +1104,79 @@ function renderHistory(){
     </div>`;
   }).join('');
 }
+function renderAssetChart(){
+  const canvas=document.getElementById('assetChart');
+  const empty=document.getElementById('assetChartEmpty');
+  if(!canvas) return;
+  const data=state.history.filter(h=>h.netWorth!=null).slice().sort((a,b)=>a.month.localeCompare(b.month));
+  if(data.length<2){ canvas.style.display='none'; if(empty) empty.style.display='block'; return; }
+  canvas.style.display='block'; if(empty) empty.style.display='none';
+
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.parentElement.clientWidth||320, H=180;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+
+  const vals=data.map(h=>h.netWorth);
+  const minV=Math.min(...vals), maxV=Math.max(...vals);
+  const pad={t:20,r:16,b:36,l:60};
+  const cW=W-pad.l-pad.r, cH=H-pad.t-pad.b;
+  const range=maxV-minV||1;
+
+  const xOf=i=>pad.l+i*(cW/(data.length-1));
+  const yOf=v=>pad.t+cH-(((v-minV)/range)*cH);
+
+  // 背景格線
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=pad.t+i*(cH/4);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+  }
+
+  // Y 軸標籤
+  ctx.fillStyle='rgba(255,255,255,0.3)'; ctx.font='10px Space Mono,monospace'; ctx.textAlign='right';
+  for(let i=0;i<=4;i++){
+    const v=minV+range*(1-i/4);
+    const y=pad.t+i*(cH/4);
+    const label=v>=10000?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v).toLocaleString();
+    ctx.fillText(label,pad.l-6,y+4);
+  }
+
+  // 漸層填色
+  const grad=ctx.createLinearGradient(0,pad.t,0,pad.t+cH);
+  grad.addColorStop(0,'rgba(0,229,160,0.25)');
+  grad.addColorStop(1,'rgba(0,229,160,0.0)');
+  ctx.beginPath();
+  ctx.moveTo(xOf(0),yOf(vals[0]));
+  data.forEach((h,i)=>{ if(i>0) ctx.lineTo(xOf(i),yOf(vals[i])); });
+  ctx.lineTo(xOf(data.length-1),pad.t+cH);
+  ctx.lineTo(xOf(0),pad.t+cH);
+  ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+
+  // 折線
+  ctx.beginPath(); ctx.strokeStyle='#00e5a0'; ctx.lineWidth=2; ctx.lineJoin='round';
+  data.forEach((h,i)=>{ i===0?ctx.moveTo(xOf(i),yOf(vals[i])):ctx.lineTo(xOf(i),yOf(vals[i])); });
+  ctx.stroke();
+
+  // 資料點
+  data.forEach((h,i)=>{
+    ctx.beginPath(); ctx.arc(xOf(i),yOf(vals[i]),3,0,Math.PI*2);
+    ctx.fillStyle='#00e5a0'; ctx.fill();
+  });
+
+  // X 軸月份標籤
+  ctx.fillStyle='rgba(255,255,255,0.3)'; ctx.font='10px Space Mono,monospace'; ctx.textAlign='center';
+  const step=Math.ceil(data.length/6);
+  data.forEach((h,i)=>{
+    if(i%step===0||i===data.length-1){
+      ctx.fillText(h.month.slice(2),xOf(i),H-pad.b+14);
+    }
+  });
+}
+
 function toggleHist(idx){ const el=document.getElementById('hd-'+idx); if(el) el.style.display=el.style.display==='block'?'none':'block'; }
-function deleteHistory(idx){ if(!confirm('確定刪除？')) return; state.history.splice(idx,1); saveState(); renderHistory(); }
+function deleteHistory(idx){ if(!confirm('確定刪除？')) return; state.history.splice(idx,1); saveState(); renderHistory(); renderAssetChart(); }
 
 // ================================================================
 // ARCHIVE — FIX: 偵測重複結算同一個月份
