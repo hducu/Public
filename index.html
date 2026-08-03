@@ -40,7 +40,6 @@ window._fbSave = function(stateObj) {
   _fbSaveTimer = setTimeout(async () => {
     try {
       const toSave = JSON.parse(JSON.stringify(stateObj));
-      toSave._updatedAt = Date.now();
       await setDoc(doc(db,'users',currentUser.uid), toSave);
     }
     catch(e) { console.warn('雲端儲存失敗',e); }
@@ -82,29 +81,19 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('userName').textContent       = user.displayName || user.email;
     const cloud = await window._fbLoad();
     if(cloud) {
-      // 比較時間戳記，用較新的資料
-      let localRaw = null;
-      try { localRaw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e){}
-      const localTs  = localRaw?._updatedAt || 0;
-      const cloudTs  = cloud._updatedAt     || 0;
-      if(cloudTs >= localTs) {
-        // 雲端較新或一樣 → 用雲端
-        if(cloud.accounts)         state.accounts         = cloud.accounts;
-        if(cloud.investments)      state.investments      = cloud.investments;
-        if(cloud.categories)       state.categories       = cloud.categories;
-        if(cloud.journal)          state.journal          = cloud.journal;
-        if(cloud.history)          state.history          = cloud.history;
-        if(cloud.manualTotalCost)  state.manualTotalCost  = cloud.manualTotalCost;
-        if(cloud.investCosts)      state.investCosts      = cloud.investCosts;
-        if(cloud.realizedGains)    state.realizedGains    = cloud.realizedGains;
-        if(cloud.costEntries)      state.costEntries      = cloud.costEntries;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({...state, _updatedAt: cloudTs})); } catch(e){}
-      } else {
-        // 本地較新 → 用本地，並立刻推送至雲端
-        console.log('本地資料較新，覆蓋雲端');
-        window._fbSave(state);
-      }
+      // 雲端為主，直接使用雲端資料
+      if(cloud.accounts)         state.accounts         = cloud.accounts;
+      if(cloud.investments)      state.investments      = cloud.investments;
+      if(cloud.categories)       state.categories       = cloud.categories;
+      if(cloud.journal)          state.journal          = cloud.journal;
+      if(cloud.history)          state.history          = cloud.history;
+      if(cloud.manualTotalCost)  state.manualTotalCost  = cloud.manualTotalCost;
+      if(cloud.investCosts)      state.investCosts      = cloud.investCosts;
+      if(cloud.realizedGains)    state.realizedGains    = cloud.realizedGains;
+      if(cloud.costEntries)      state.costEntries      = cloud.costEntries;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
     } else {
+      // Firebase 讀不到（首次或離線）→ 用本地，並推送至雲端
       window._fbSave(state);
     }
     renderAll();
@@ -527,8 +516,7 @@ function sumByCategory(entries,type){ const m={}; entries.filter(e=>e.type===typ
 function randomColor(){ return ['#ff6b6b','#f5c842','#26de81','#45aaf2','#fd79a8','#a29bfe','#74b9ff','#ff9f43','#00cec9','#00e5a0'][Math.floor(Math.random()*10)]; }
 
 function saveState(){
-  const toSave = {...state, _updatedAt: Date.now()};
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave)); }catch(e){}
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
   if(window._fbSave) window._fbSave(state);
   showToast('已儲存 ✓');
 }
@@ -542,8 +530,7 @@ function loadState(){
       if(s.categories)       state.categories       = s.categories;
       if(s.journal)          state.journal          = s.journal;
       if(s.history)          state.history          = s.history;
-      if(s._updatedAt)       state._updatedAt       = s._updatedAt;
-      if(s.manualTotalCost)  state.manualTotalCost  = s.manualTotalCost;
+      if(s.costEntries)      state.costEntries      = s.costEntries;
       if(s.investCosts)      state.investCosts      = s.investCosts;
       if(s.realizedGains)    state.realizedGains    = s.realizedGains;
       if(s.costEntries)      state.costEntries      = s.costEntries;
