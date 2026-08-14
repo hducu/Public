@@ -1431,13 +1431,16 @@ function renderCostEntries(){
     list.innerHTML=`<div style="color:var(--muted);font-size:11px;padding:6px 0;">尚無紀錄</div>`;
   } else {
     list.innerHTML=state.costEntries.slice().sort((a,b)=>b.date.localeCompare(a.date)).map((c)=>{
+      const isPos=c.amount>=0;
+      const amtColor=isPos?'var(--red)':'var(--green)';
+      const amtLabel=isPos?`-${fmt(c.amount)}`:`+${fmt(Math.abs(c.amount))}`;
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px;">
         <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:0;">
           <span style="color:var(--muted);white-space:nowrap;">${c.date.slice(5)}</span>
           <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.desc||'—'}</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
-          <span style="font-family:'Space Mono',monospace;color:var(--text);white-space:nowrap;">${fmt(c.amount)}</span>
+          <span style="font-family:'Space Mono',monospace;color:${amtColor};white-space:nowrap;">${amtLabel}</span>
           <button class="edit-btn" style="color:var(--red);border-color:rgba(255,99,99,0.3);" onclick="deleteCostEntry('${c.id}')">✕</button>
         </div>
       </div>`;
