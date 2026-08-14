@@ -416,20 +416,8 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-seri
           <div id="costList"></div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
-          <span style="font-size:12px;color:var(--muted);">未實現損益</span>
+          <span style="font-size:12px;color:var(--muted);">預估損益</span>
           <span id="sumGain" style="font-family:'Space Mono',monospace;font-size:15px;font-weight:700;">$0</span>
-        </div>
-        <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleRealizedPanel()">
-            <span style="font-size:12px;color:var(--muted);">實現損益 <span id="realizedChevron" style="font-size:10px;transition:transform .2s;display:inline-block;">▶</span></span>
-            <span style="display:flex;align-items:center;gap:6px;">
-              <span id="sumRealized" style="font-family:'Space Mono',monospace;font-size:15px;font-weight:700;">$0</span>
-              <button class="edit-btn" onclick="event.stopPropagation();addRealizedGain()">＋</button>
-            </span>
-          </div>
-          <div id="realizedPanel" style="display:none;margin-top:8px;">
-            <div id="realizedList"></div>
-          </div>
         </div>
       </div>
     </div>
@@ -553,7 +541,7 @@ function renderAll(){
   const mfEl=document.getElementById('filterMonth');
   if(dateEl) dateEl.textContent=`${now.getFullYear()} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
   if(mfEl && !mfEl.value) mfEl.value=mk;
-  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderRealized(); renderCostEntries(); renderBudgetSettings(); renderHistory(); renderAssetChart();
+  renderHero(); renderJournal(); renderSummary(); renderAccounts(); renderInvestments(); renderInvestSummary(); renderCostEntries(); renderBudgetSettings(); renderHistory(); renderAssetChart();
 }
 
 function renderHero(){
@@ -766,8 +754,26 @@ function saveJournalEntry(){
   } else {
     state.journal.push(entry);
   }
+
+  // 股票支出自動同步到總成本（增加）；股票收入自動同步（減少）
+  const STOCK_EXP_ID='mou4rj8d4tog';
+  const STOCK_INC_ID='mowm51pf5rbm';
+  if(currentEditType!=='journal_edit'){
+    if(!state.costEntries) state.costEntries=[];
+    if(entry.type==='expense' && entry.categoryId===STOCK_EXP_ID){
+      state.costEntries.push({ id:uid(), date, desc:desc||'股票買入', amount });
+      showToast(`-${fmt(amount)} 已記錄，並自動加入總成本`);
+    } else if(entry.type==='income' && entry.categoryId===STOCK_INC_ID){
+      state.costEntries.push({ id:uid(), date, desc:desc||'股票賣出', amount:-amount });
+      showToast(`+${fmt(amount)} 已記錄，並自動從總成本扣除`);
+    } else {
+      showToast(entry.type==='expense'?`-${fmt(amount)} 已記錄`:`+${fmt(amount)} 已記錄`);
+    }
+  } else {
+    showToast(entry.type==='expense'?`-${fmt(amount)} 已記錄`:`+${fmt(amount)} 已記錄`);
+  }
+
   saveState(); closeModal(); renderAll();
-  showToast(entry.type==='expense'?`-${fmt(amount)} 已記錄`:`+${fmt(amount)} 已記錄`);
 }
 
 // ================================================================
@@ -1026,13 +1032,11 @@ function renderInvestSummary(){
   const se=document.getElementById('sumEtf');
   const sc=document.getElementById('sumCrypto');
   const st=document.getElementById('sumTotal');
-  const sco=document.getElementById('sumCost');
   const sg=document.getElementById('sumGain');
   const su=document.getElementById('investSummaryUpdated');
   if(se) se.textContent=fmt(etfTotal);
   if(sc) sc.textContent=fmt(cryptoTotal);
   if(st) st.textContent=fmt(total);
-  if(sco) sco.textContent=fmt(totalCost);
   if(sg){
     sg.textContent=(up?'+':'-')+'$'+Math.round(Math.abs(gain)).toLocaleString();
     sg.style.color=up?'var(--green)':'var(--red)';
